@@ -51,8 +51,8 @@ async def main():
     scheduler = AsyncIOScheduler()
 
     # Horários automáticos (exemplo: 06h e 18h)
-    scheduler.add_job(analisar_partidas, 'cron', hour=6, minute=0)
-    scheduler.add_job(analisar_partidas, 'cron', hour=18, minute=0)
+    scheduler.add_job(analisa_partidas, 'cron', hour=6, minute=0)
+    scheduler.add_job(analisa_partidas, 'cron', hour=18, minute=0)
 
     scheduler.start()
 
