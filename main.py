@@ -34,19 +34,23 @@ def get_json(url, params=None, headers=None, timeout=15):
     except Exception as e:
         print("HTTP error:", e, url, params)
         return None
+from datetime import datetime, timedelta
 
-# ==============================
-# COLETA / PROCESSAMENTO DE DADOS
-# ==============================
-def fetch_fixtures_today():
-    """Busca fixtures do dia atual (UTC -> convert later if needed)."""
-    today = date.today().strftime("%Y-%m-%d")
+def fetch_fixtures_today(hours_ahead=48):
+    """Busca partidas nas próximas X horas (padrão = 48h)"""
+    agora = datetime.utcnow()
+    limite = agora + timedelta(hours=hours_ahead)
+
     url = "https://v3.football.api-sports.io/fixtures"
-    params = {"date": today}
-    data = get_json(url, params=params)
-    if not data:
+    parametros = {
+        "from": agora.strftime("%Y-%m-%d"),
+        "to": limite.strftime("%Y-%m-%d")
+    }
+
+    dados = get_json(url, params=parametros))
+    if not dados:
         return []
-    return data.get("response", [])
+    return dados.get("response", [])
 
 def fetch_last_matches_for_team(team_id, last=5):
     """Pega os últimos last fixtures de um time (passado)."""
