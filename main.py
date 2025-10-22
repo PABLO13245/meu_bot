@@ -1,23 +1,23 @@
-from keep_alive import keep_alive
-keep_alive()
-
 import asyncio
 import requests
-import pytz
-from datetime import datetime
-from telegram import Bot
-from telegram.constants import ParseMode
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from telegram import Bot
 
-# === CONFIGURAÇÕES ===
-TOKEN = "8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE"
+# ==============================
+# CONFIGURAÇÕES DO BOT
+# ==============================
+API_KEY = "ab6e5b1b2e0442c99c5d0a627730b33f"
+BOT_TOKEN = ""8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE
 CHAT_ID = "5245918045"
 
-bot = Bot(token=TOKEN)
+bot = Bot(token=BOT_TOKEN)
 
+# ==============================
+# FUNÇÃO PARA ANALISAR PARTIDAS
+# ==============================
 async def analisar_partidas():
     try:
-        url = f"https://www.scorebat.com/video-api/v3/feed/?token={ab6e5b1b2e0442c99c5d0a627730b33f}"
+        url = f"https://www.scorebat.com/video-api/v3/feed/?token={API_KEY}"
         resposta = requests.get(url, timeout=10)
         partidas = resposta.json().get("response", [])
 
@@ -47,16 +47,19 @@ async def analisar_partidas():
         )
 
     except Exception as e:
-        await bot.send_message(chat_id=CHAT_ID, text=f"❌ Erro ao obter partidas: {e}")async def main():  # Função principal
-    # Executa o teste imediatamente
-    await analisar_partidas()
+        await bot.send_message(chat_id=CHAT_ID, text=f"❌ Erro ao obter partidas: {e}")
 
-    tz = pytz.timezone('America/Sao_Paulo')
-    scheduler = AsyncIOScheduler(timezone=tz)
 
-    # Horários automáticos
+# ==============================
+# LOOP PRINCIPAL
+# ==============================
+async def main():
+    scheduler = AsyncIOScheduler()
+
+    # Horários automáticos (exemplo: 06h e 18h)
     scheduler.add_job(analisar_partidas, 'cron', hour=6, minute=0)
     scheduler.add_job(analisar_partidas, 'cron', hour=18, minute=0)
+
     scheduler.start()
 
     # Mantém o bot rodando continuamente
@@ -64,5 +67,8 @@ async def analisar_partidas():
         await asyncio.sleep(60)
 
 
+# ==============================
+# EXECUÇÃO DO BOT
+# ==============================
 if __name__ == "__main__":
     asyncio.run(main())
