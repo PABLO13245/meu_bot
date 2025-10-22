@@ -17,7 +17,7 @@ bot = Bot(token=BOT_TOKEN)
 # ==============================
 async def analisar_partidas():
     try:
-        url = "https://www.scorebat.com/video-api/v3/feed/?token=API_KEY"
+        url = "https://www.scorebat.com/api/v3/feed/?token=API_KEY"
         resposta = requests.get(url, timeout=10)
         partidas = resposta.json().get("response", [])
 
