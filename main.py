@@ -288,8 +288,11 @@ async def main():
     while True:
         await asyncio.sleep(60)
 
-if __name__ == "__main__":
-    # optional immediate test: set env TEST_NOW=1 to do a run on start
-    if os.environ.get("TEST_NOW", "0") == "1":
-        asyncio.run(run_analysis_send(5))
-    asyncio.run(main())
+if _name_ == "_main_":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "test":
+        import asyncio
+        asyncio.run(analisa_partidas())
+    else:
+        import asyncio
+        asyncio.run(main())
