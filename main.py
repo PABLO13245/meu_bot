@@ -288,7 +288,7 @@ async def main():
     while True:
         await asyncio.sleep(60)
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         import asyncio
