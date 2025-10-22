@@ -65,5 +65,5 @@ async def main():
 # EXECUÇÃO DO BOT
 # ==============================
 if __name__ == "__main__":
-    asyncio.run(analisar_partidas())  # executa o teste manual
+    asyncio.run(analisa_partidas())  # executa o teste manual
     asyncio.run(main())               # inicia o loop automático
