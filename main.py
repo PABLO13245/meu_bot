@@ -7,7 +7,7 @@ from telegram import Bot
 # CONFIGURAÇÕES DO BOT
 # ==============================
 API_KEY = "ab6e5b1b2e0442c99c5d0a627730b33f"
-BOT_TOKEN = ""8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE
+BOT_TOKEN = "8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE"
 CHAT_ID = "5245918045"
 
 bot = Bot(token=BOT_TOKEN)
