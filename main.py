@@ -70,7 +70,7 @@ def compute_team_metrics(team_id):
      - avg_corners_for (se disponível via statistics)
      - win_rate (últimos 5)
     """
-    matches = fetch_last_matches_for_team(team_id, last=5)
+    matches = fetch_last_matches_for_team(team_id, last=3)
     goals_for = []
     goals_against = []
     wins = 0
