@@ -105,8 +105,7 @@ scheduler.start()
 # ==============================
 # EXECUÇÃO
 # ==============================
-if __name__ == "__main__":
-    # teste manual imediato
-    asyncio.run(analisa_partidas())
-    # modo automático 24h
-    asyncio.run(main())
+if _name_ == "_main_":
+    asyncio.run(analisa_partidas())  # Teste imediato
+    asyncio.run(main())              # Inicia agendamentos
+    print("✅ Bot rodando 24h. Enviará análises automáticas às 06:00 e 16:00 (horário de Brasília).")
