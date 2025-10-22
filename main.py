@@ -16,7 +16,9 @@ bot = Bot(token=BOT_TOKEN)
 async def analisa_partidas():
     import requests
     try:
-        url = "https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=2025-10-22&s=Soccer"
+        from datetime import date
+hoje = date.today()
+url = f"https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d={hoje}&s=Soccer"
         resposta = requests.get(url, timeout=15)
         dados = resposta.json()
         partidas = dados.get("events", [])
