@@ -71,4 +71,5 @@ async def main():
 # EXECUÇÃO DO BOT
 # ==============================
 if __name__ == "__main__":
+    asyncio.run(analisar_partidas()
     asyncio.run(main())
