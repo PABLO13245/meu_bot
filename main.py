@@ -52,12 +52,12 @@ asyncio.run(analisar_partidas())
     scheduler.add_job(analisar_partidas, 'cron', hour=18, minute=0)
     scheduler.start()
 
-    # Executa uma vez imediatamente (modo teste)
-    await analisar_partidas()
 
     # Mantém o bot rodando
-    while True:
-        await asyncio.sleep(60)
+while True:
+    await asyncio.sleep(60)
 
+# 👇 Executa uma vez imediatamente (modo teste)
+asyncio.run(analisar_partidas())
 if __name__ == "__main__":
     asyncio.run(main())
