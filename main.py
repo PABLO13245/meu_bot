@@ -12,13 +12,14 @@ CHAT_ID = "5245918045"
 
 bot = Bot(token=BOT_TOKEN)
 
-# 🔍 NOVA FUNÇÃO PARA BUSCAR PARTIDAS (sem chave de API)
+# NOVA FUNÇÃO PARA BUSCAR PARTIDAS (sem chave de API)
 async def analisa_partidas():
     import requests
+    from datetime import date
+
     try:
-        from datetime import date
-hoje = date.today()
-url = f"https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d={hoje}&s=Soccer"
+        hoje = date.today()
+        url = f"https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d={hoje}&s=Soccer"
         resposta = requests.get(url, timeout=15)
         dados = resposta.json()
         partidas = dados.get("events", [])
@@ -28,44 +29,19 @@ url = f"https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d={hoje}&s=Socce
             return
 
         mensagens = []
-        for jogo in partidas[:5]:  # mostra só 5 para não lotar o chat
+        for jogo in partidas[:5]:  # mostra só 5 jogos pra não lotar o chat
             time_casa = jogo.get("strHomeTeam", "Desconhecido")
             time_fora = jogo.get("strAwayTeam", "Desconhecido")
             horario = jogo.get("strTime", "00:00")
             liga = jogo.get("strLeague", "Desconhecida")
-            mensagens.append(
-                f"⚽ {time_casa} x {time_fora}\n🏆 {liga}\n🕓 {horario}\n"
-            )
+
+            mensagens.append(f"⚽ {time_casa} x {time_fora}\n🏆 {liga}\n🕒 {horario}\n")
 
         for msg in mensagens:
             await bot.send_message(CHAT_ID, text=msg)
 
     except Exception as e:
         await bot.send_message(CHAT_ID, text=f"❌ Erro ao buscar partidas: {e}")
-
-        mensagens = []
-        for jogo in partidas[:5]:
-            titulo = jogo.get("title", "Partida sem título")
-            competicao = jogo.get("competition", {}).get("name", "Desconhecida")
-            data = jogo.get("date", "")[:16].replace("T", " ")
-            video_url = jogo.get("matchviewUrl", "#")
-
-            mensagens.append(
-                f"⚽ <b>{titulo}</b>\n"
-                f"🏆 {competicao}\n"
-                f"📅 {data}\n"
-                f"<a href='{video_url}'>Ver detalhes</a>\n"
-            )
-
-        final = "\n\n".join(mensagens)
-        await bot.send_message(
-            chat_id=CHAT_ID,
-            text=f"<b>Análise automática de jogos:</b>\n\n{final}",
-            parse_mode="HTML"
-        )
-
-    except Exception as e:
-        await bot.send_message(chat_id=CHAT_ID, text=f"❌ Erro ao obter partidas: {e}")
 
 
 # ==============================
