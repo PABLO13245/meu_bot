@@ -89,5 +89,5 @@ async def main():
 # ==============================
 # EXECUÇÃO DO BOT
 # ==============================
-if _name_ == "_main_":
+if __name__ == "__main__":
     asyncio.run(analisa_partidas())  # Envia UMA análise agora (teste)
