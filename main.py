@@ -10,7 +10,7 @@ from telegram.constants import ParseMode
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # === CONFIGURAÇÕES ===
-TOKEN = ""8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE
+TOKEN = "8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE"
 CHAT_ID = "5245918045"
 
 bot = Bot(token=TOKEN)
