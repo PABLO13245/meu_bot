@@ -288,11 +288,10 @@ async def main():
     while True:
         await asyncio.sleep(60)
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     import sys
+    import asyncio
     if len(sys.argv) > 1 and sys.argv[1] == "test":
-        import asyncio
-        asyncio.(run_analisa_partidas())
+        asyncio.run(run_analysis_send(5))
     else:
-        import asyncio
         asyncio.run(main())
