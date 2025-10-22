@@ -84,10 +84,18 @@ async def analisa_partidas():
 async def main():
     scheduler = AsyncIOScheduler(timezone=tz)
 
-    # Agendamentos automáticos
-    scheduler.add_job(analisa_partidas, "cron", hour=6, minute=0)
-    scheduler.add_job(analisa_partidas, "cron", hour=16, minute=0)
-    scheduler.start()
+    from datetime import datetime, timedelta
+
+# Agendamentos automáticos
+scheduler.add_job(analisa_partidas, "cron", hour=6, minute=0)
+scheduler.add_job(analisa_partidas, "cron", hour=16, minute=0)
+
+# Agendamento especial (somente hoje às 18h)
+agora = datetime.now(tz)
+if agora.hour < 18:
+    scheduler.add_job(analisa_partidas, "date", run_date=agora.replace(hour=18, minute=0, second=0))
+
+scheduler.start()
 
     print("✅ Bot rodando 24h. Enviará análises automáticas às 06:00 e 16:00 (horário de Brasília).")
 
