@@ -42,7 +42,8 @@ async def analisar_partidas():
     except Exception as e:
         await bot.send_message(chat_id=CHAT_ID, text=f"❌ Erro ao obter partidas: {e}")
 
-async def main():
+async def main():# Teste manual imediato
+asyncio.run(analisar_partidas())
     tz = pytz.timezone("America/Sao_Paulo")
     scheduler = AsyncIOScheduler(timezone=tz)
 
