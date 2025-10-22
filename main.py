@@ -58,5 +58,5 @@ async def main():
     while True:
         await asyncio.sleep(60)
 
-if _name_ == "_main_":
+if _name_ == "__main__":
     asyncio.run(main())
