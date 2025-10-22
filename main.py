@@ -1,18 +1,33 @@
 import asyncio
 import requests
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import date, datetime
 from telegram import Bot
-from datetime import date
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import random
+import pytz
 
 # ==============================
 # CONFIGURAÇÕES DO BOT
 # ==============================
-API_KEY = "eac4bfa1690903a2c6328dd2bb4a94e"
 BOT_TOKEN = "8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE"
 CHAT_ID = "5245918045"
-
 bot = Bot(token=BOT_TOKEN)
+tz = pytz.timezone("America/Sao_Paulo")
+
+# ==============================
+# FUNÇÃO PARA PEGAR BANDEIRA
+# ==============================
+def get_flag(team_name):
+    flags = {
+        "Brazil": "🇧🇷", "England": "🏴", "Spain": "🇪🇸", "France": "🇫🇷",
+        "Germany": "🇩🇪", "Italy": "🇮🇹", "Portugal": "🇵🇹", "Argentina": "🇦🇷",
+        "USA": "🇺🇸", "Japan": "🇯🇵", "Mexico": "🇲🇽", "Netherlands": "🇳🇱",
+        "Turkey": "🇹🇷", "Chile": "🇨🇱", "Uruguay": "🇺🇾"
+    }
+    for country, flag in flags.items():
+        if country.lower() in team_name.lower():
+            return flag
+    return "⚽"
 
 # ==============================
 # FUNÇÃO PRINCIPAL DE ANÁLISE
@@ -20,6 +35,7 @@ bot = Bot(token=BOT_TOKEN)
 async def analisa_partidas():
     try:
         hoje = date.today()
+        data_formatada = datetime.now(tz).strftime("%d/%m/%Y")
         url = f"https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d={hoje}&s=Soccer"
         resposta = requests.get(url, timeout=15)
         dados = resposta.json()
@@ -29,65 +45,60 @@ async def analisa_partidas():
             await bot.send_message(CHAT_ID, text="⚠ Nenhuma partida encontrada no momento.")
             return
 
-        mensagens = ["📊 Análise Automática de Futebol – Jogos do Dia ⚽\n"]
+        texto_final = f"📅 Análises de Hoje — {data_formatada}\n"
+        texto_final += "🔥 ANÁLISE VIP FUTEBOL 🔥\n\n"
+        texto_final += "As 8 melhores partidas com oportunidades de aposta:\n\n"
 
-        for jogo in partidas[:8]:  # Mostra 8 jogos do dia
+        for jogo in partidas[:8]:
             time_casa = jogo.get("strHomeTeam", "Desconhecido")
             time_fora = jogo.get("strAwayTeam", "Desconhecido")
             horario = jogo.get("strTime", "00:00")
             liga = jogo.get("strLeague", "Desconhecida")
 
-            # Simulação de sugestões automáticas
-            opcoes_gol = ["+1.5 Gols", "+2.5 Gols", "Ambas Marcam", "Menos de 3.5 Gols"]
-            opcoes_esc = ["+8 Escanteios", "+9 Escanteios", "Mais de 10 Escanteios"]
-            opcoes_vit = [
-                f"Vitória do {time_casa}",
-                f"Vitória do {time_fora}",
-                "Empate Anula",
-                "Chance Dupla"
-            ]
+            flag_casa = get_flag(time_casa)
+            flag_fora = get_flag(time_fora)
 
-            sugestao_gol = random.choice(opcoes_gol)
-            sugestao_esc = random.choice(opcoes_esc)
-            sugestao_vit = random.choice(opcoes_vit)
+            aposta = random.choice([
+                "✅ Vitória provável do time da casa",
+                "⚽ Mais de 2.5 gols",
+                "🔺 Mais de 8.5 escanteios",
+                "🚨 Ambas as equipes marcam",
+                "💪 Vitória provável do visitante",
+                "🎯 Mais de 1.5 gols no 1º tempo",
+                "🔥 +10 escanteios totais"
+            ])
 
-            mensagens.append(
-                f"🏆 {liga}\n"
-                f"⚔ {time_casa} vs {time_fora}\n"
-                f"🕒 {horario}\n\n"
-                f"💡 Sugestões de Aposta:\n"
-                f"   • {sugestao_gol}\n"
-                f"   • {sugestao_esc}\n"
-                f"   • {sugestao_vit}\n"
-                "───────────────────────────────"
-            )
+            texto_final += f"{flag_casa} {time_casa} x {time_fora} {flag_fora}\n"
+            texto_final += f"🏆 {liga}\n🕒 {horario}\n🎯 {aposta}\n\n"
 
-        await bot.send_message(CHAT_ID, text="\n\n".join(mensagens), parse_mode="Markdown")
+        texto_final += "📊 Gerado automaticamente pelo Bot Análise Futebol."
+
+        await bot.send_message(CHAT_ID, text=texto_final, parse_mode="Markdown")
 
     except Exception as e:
         await bot.send_message(CHAT_ID, text=f"❌ Erro ao buscar partidas: {e}")
 
-
 # ==============================
-# LOOP PRINCIPAL DO BOT
+# LOOP PRINCIPAL E AGENDAMENTO
 # ==============================
 async def main():
-    scheduler = AsyncIOScheduler()
+    scheduler = AsyncIOScheduler(timezone=tz)
 
-    # Roda automaticamente às 06:00 e 16:00
-    scheduler.add_job(analisa_partidas, 'cron', hour=6, minute=0)
-    scheduler.add_job(analisa_partidas, 'cron', hour=16, minute=0)
+    # Agendamentos automáticos
+    scheduler.add_job(analisa_partidas, "cron", hour=6, minute=0)
+    scheduler.add_job(analisa_partidas, "cron", hour=16, minute=0)
     scheduler.start()
 
-    print("✅ Bot de análise iniciado! Enviará jogos às 06:00 e 16:00 (horário de Brasília).")
+    print("✅ Bot rodando 24h. Enviará análises automáticas às 06:00 e 16:00 (horário de Brasília).")
 
-    # Mantém o bot ativo
     while True:
         await asyncio.sleep(60)
 
-
 # ==============================
-# EXECUÇÃO DO BOT
+# EXECUÇÃO
 # ==============================
 if __name__ == "__main__":
-    asyncio.run(analisa_partidas())  # Envia UMA análise agora (teste)
+    # teste manual imediato
+    asyncio.run(analisa_partidas())
+    # modo automático 24h
+    asyncio.run(main())
