@@ -29,7 +29,7 @@ async def analisa_partidas():
             return
 
         mensagens = []
-        for jogo in partidas[:5]:  # mostra só 5 jogos pra não lotar o chat
+        for jogo in partidas[:5]:  # mostra só 7 jogos pra não lotar o chat
             time_casa = jogo.get("strHomeTeam", "Desconhecido")
             time_fora = jogo.get("strAwayTeam", "Desconhecido")
             horario = jogo.get("strTime", "00:00")
