@@ -47,7 +47,7 @@ def fetch_fixtures_today(hours_ahead=48):
         "to": limite.strftime("%Y-%m-%d")
     }
 
-    dados = get_json(url, params=parametros))
+    dados = get_json(url, params=parametros)
     if not dados:
         return []
     return dados.get("response", [])
