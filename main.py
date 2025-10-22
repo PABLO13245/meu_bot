@@ -17,20 +17,29 @@ bot = Bot(token=TOKEN)
 
 async def analisar_partidas():
     try:
-        url = "https://www.scorebat.com/video-api/v3/feed/"
-        resposta = requests.get(url, timeout=10).json()
+    # Simulação temporária de partidas (modo teste)
+    partidas = [
+        {"titulo": "Brasil x Argentina", "competicao": "Amistoso Internacional", "data": "2025-10-22", "video_url": "https://exemplo.com"}
+    ]
 
-        partidas = resposta.get("response", [])
-        if not partidas:
-            await bot.send_message(chat_id=CHAT_ID, text="⚠ Nenhuma partida encontrada no momento.")
-            return
+    if not partidas:
+        await bot.send_message(chat_id=CHAT_ID, text="⚠ Nenhuma partida encontrada no momento.")
+        return
 
-        mensagens = []
-        for jogo in partidas[:5]:
-            titulo = jogo.get("title", "Partida sem título")
-            competicao = jogo.get("competition", {}).get("name", "Desconhecida")
-            data = jogo.get("date", "")[:16].replace("T", " ")
-            video_url = jogo.get("matchviewUrl", "")
+    mensagens = []
+    for jogo in partidas[:5]:
+        titulo = jogo.get("titulo", "Partida sem título")
+        competicao = jogo.get("competicao", "Desconhecida")
+        data = jogo.get("data", "Sem data")
+        video_url = jogo.get("video_url", "")
+
+        mensagens.append(f"🏆 <b>{competicao}</b>\n⚽ {titulo}\n📅 {data}\n🎥 <a href='{video_url}'>Ver detalhes</a>")
+
+    final = "\n\n".join(mensagens)
+    await bot.send_message(chat_id=CHAT_ID, text=f"📊 <b>Análise automática de jogos</b>\n\n{final}", parse_mode="HTML")
+
+except Exception as e:
+    await bot.send_message(chat_id=CHAT_ID, text=f"❌ Erro ao obter partidas: {e}")
 
             mensagens.append(
                 f"🏆 <b>{competicao}</b>\n⚽ {titulo}\n🕒 {data}\n🔗 <a href='{video_url}'>Ver detalhes</a>"
