@@ -11,7 +11,7 @@ from statistics import mean
 # ==============================
 # CONFIGURAÇÕES
 # ==============================
-SPORTMONKS_TOKEN = os.environ.get("SPORTMONKS_TOKEN", "EI7WanytFQuS2LmHvbBQ1fMDJjzcbXfsCmgWBQ62enNgPDaYCbwRjH5fj36W")
+SPORTMONKS_TOKEN = os.environ.get("SPORTMONKS_TOKEN", "eNQYLjIAtZ5co7oMxlzyTPd4fb3s2lzRpDnQpNm9hoBL7sDoYr1HNHQKhPul")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE")
 CHAT_ID = os.environ.get("CHAT_ID", "5245918045")
 TZ = pytz.timezone("America/Sao_Paulo")
