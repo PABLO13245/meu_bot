@@ -5,6 +5,7 @@ import requests
 from datetime import datetime, timedelta, timezone
 from telegram import Bot
 import pytz
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from statistics import mean
 
 # ==============================
