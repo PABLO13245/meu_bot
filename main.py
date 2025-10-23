@@ -3,7 +3,6 @@ import os
 import asyncio
 import requests
 from datetime import datetime, timedelta, timezone
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Bot
 import pytz
 from statistics import mean
