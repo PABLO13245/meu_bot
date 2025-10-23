@@ -2,7 +2,7 @@ import requests
 from datetime import date, timedelta
 
 # Seu token da SportMonks
-SPORTMONKS_TOKEN = "ETInavyFtcus2IwhybB041wDijZobXf4e6mgMB02a6mlpqDa1vCHpjH5t436iW"
+SPORTMONKS_TOKEN = "eNQYLjIAtZ5co7oMxlzyTPd4fb3s2lzRpDnQpNm9hoBL7sDoYr1HNHQKhPul"
 BASE_URL = "https://api.sportmonks.com/v3/football"
 
 # Datas: hoje e daqui a 3 dias
