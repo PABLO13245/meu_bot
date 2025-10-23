@@ -16,6 +16,8 @@ url = f"{BASE_URL}/fixtures/between/{hoje}/{futuro}?api_token={SPORTMONKS_TOKEN}
 resposta = requests.get(url)
 
 print("Status da resposta:", resposta.status_code)
+print("URL usada:", url)
+print("Resposta bruta:", resposta.text)
 
 if resposta.status_code == 200:
     dados = resposta.json()
