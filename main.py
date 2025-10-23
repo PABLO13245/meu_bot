@@ -36,25 +36,31 @@ def get_json(url, params=None, headers=None, timeout=15):
         return None
 from datetime import datetime, timedelta, timezone
 
-def fetch_fixtures_today(hours_ahead=48):
+Idef fetch_fixtures_today(hours_ahead=48):
     """Busca partidas nas próximas X horas (padrão = 48h)"""
-    agora = datetime.now(timezone.utc)
+    from datetime import datetime, timedelta
+    import requests
+
+    agora = datetime.utcnow()
     limite = agora + timedelta(hours=hours_ahead)
 
-    url = "https://v3.football.api-sports.io/fixtures"
-    parametros = {
-        "from": agora.strftime("%Y-%m-%dT%H:%M:%SZ"),  # formato completo UTC
-        "to": limite.strftime("%Y-%m-%dT%H:%M:%SZ")
+    url = "https://app.sportdataapi.com/api/v1/soccer/matches"
+    params = {
+        "apikey": "f8270c3b6c8ef0c1e9d3aea73b38b719",
+        "date_from": agora.strftime("%Y-%m-%d"),
+        "date_to": limite.strftime("%Y-%m-%d")
     }
 
-    dados = get_json(url, params=parametros)
-    if not dados:
-        print("⚠ Nenhum dado retornado da API.")
+    try:
+        r = requests.get(url, params=params, timeout=20)
+        r.raise_for_status()
+        dados = r.json()
+        partidas = dados.get("data", [])
+        print(f"✅ {len(partidas)} partidas encontradas.")
+        return partidas
+    except Exception as e:
+        print("⚠ Erro ao buscar partidas:", e)
         return []
-    
-    resposta = dados.get("response", [])
-    print(f"✅ {len(resposta)} partidas encontradas no intervalo de {hours_ahead}h.")
-    return resposta
 
 def fetch_last_matches_for_team(team_id, last=5):
     """Pega os últimos last fixtures de um time (passado)."""
