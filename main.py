@@ -41,13 +41,22 @@ def fetch_upcoming_fixtures():
     start = datetime.utcnow()
     end = start + timedelta(hours=48)
     params = {
-        "filters[between]": f"{start.strftime('%Y-%m-%d')},{end.strftime('%Y-%m-%d')}",
         "include": "participants,league",
+        "per_page": 10,
     }
     data = get_json("fixtures", params)
     if not data or "data" not in data:
         return []
-    return data["data"]
+    # Filtra localmente por data
+    fixtures = []
+    for f in data["data"]:
+        try:
+            kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00"))
+            if start <= kickoff <= end:
+                fixtures.append(f)
+        except Exception:
+            continue
+    return fixtures
 
 def fetch_last_matches_for_team(team_id, last=5):
     params = {
