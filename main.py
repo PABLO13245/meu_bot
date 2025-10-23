@@ -151,4 +151,4 @@ def decide_suggestion(home_metrics, away_metrics):
             98,
             (home_metrics["win_rate"] * 40)
             + (away_metrics["win_rate"] * 20)
-            + (goals_sum *
+            + (goals_sum) *
