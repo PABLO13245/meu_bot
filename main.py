@@ -57,10 +57,12 @@ def fetch_upcoming_fixtures():
 
     endpoint = "fixtures"
 params = {
-    "filter[starts_between]": f"{start_str},{end_str}",
     "include": "participants;league",
+    "filters[status]": "NS",  # partidas não iniciadas
+    "filter[starting_at_between]": f"{start_str},{end_str}",
+    "page": 1,
+    "per_page": 50,
 }
-params = {
         "include": "participants;league",
         "filters[status]": "NS",  # partidas não iniciadas
         "page": 1,
