@@ -48,34 +48,39 @@ def get_json(endpoint, params=None):
         print(f"❌ Erro na requisição: {e}")
         return None
 
-# 🧩 COLETA DE PARTIDAS (versão ajustada e completa)
+# 🧩 COLETA DE PARTIDAS (versão funcional)
 def fetch_upcoming_fixtures():
+    import requests
+    from datetime import datetime, timedelta, timezone
+
+    API_TOKEN = "SEU_TOKEN_AQUI"  # substitua pelo seu token real
     start = datetime.now(timezone.utc)
     end = start + timedelta(days=3)  # buscar próximos 3 dias
     start_str = start.strftime("%Y-%m-%d")
     end_str = end.strftime("%Y-%m-%d")
 
-    endpoint = "fixtures"
-    params = {
-        "include": "participants;league",
-        "filters[status]": "NS",  # partidas não iniciadas
-        "filter[starting_at_between]": f"{start_str},{end_str}",
-        "page": 1,
-        "per_page": 50,
-    }
+    url = (
+        f"https://api.sportmonks.com/v3/football/fixtures?"
+        f"api_token={API_TOKEN}"
+        f"&include=participants;league;season"
+        f"&filter[status]=NS"
+        f"&filter[starting_at_between]={start_str},{end_str}"
+        f"&page=1&per_page=50"
+    )
 
-    print(f"🧩 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}")
+    print(f"🔍 Buscando partidas entre {start_str} e {end_str}...")
 
-    data = get_json(endpoint, params)
+    response = requests.get(url)
 
-    if not data or "data" not in data:
-        print("❌ Nenhuma partida retornada pela API (verifique token ou filtros).")
+    if response.status_code != 200:
+        print(f"❌ Erro da API: {response.text}")
         return []
 
-    fixtures = data["data"]
+    data = response.json()
+    fixtures = data.get("data", [])
     print(f"✅ {len(fixtures)} partidas encontradas com status 'NS' (Not Started).")
 
-    # 🔹 Mostrar as 5 primeiras partidas para teste
+    # Mostrar 5 primeiras partidas
     for f in fixtures[:5]:
         teams = [p["name"] for p in f.get("participants", [])]
         print(f"⚽ {f['id']} | {' x '.join(teams)}")
