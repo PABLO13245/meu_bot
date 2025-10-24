@@ -41,15 +41,31 @@ def fetch_upcoming_fixtures():
     start = datetime.utcnow()
     end = start + timedelta(hours=48)
 
-    # busca partidas futuras (status = 'not_started')
+    # Parâmetros ajustados para v3 — apenas datas e status
     params = {
-        "filters[status]": "not_started",
+        "date_from": start.strftime("%Y-%m-%d"),
+        "date_to": end.strftime("%Y-%m-%d"),
+        "status": "NS",  # NS = not started
         "per_page": 20
     }
+
     data = get_json("fixtures", params)
     if not data or "data" not in data:
         print("❌ Nenhuma partida retornada pela API.")
         return []
+
+    fixtures = []
+    for f in data["data"]:
+        try:
+            kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00"))
+            if start <= kickoff <= end:
+                fixtures.append(f)
+        except Exception as e:
+            print("Erro ao processar partida:", e)
+            continue
+
+    print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
+    return fixtures
 
     fixtures = []
     for f in data["data"]:
