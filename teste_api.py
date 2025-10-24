@@ -1,14 +1,11 @@
-import requests
+import os  
+import requests  
 
-API_TOKEN = "poBgEc23XAtTi2BEDIF7MmyY5BRAji5zkB1rAwTlXi1vA0B5NbuKJcLBK4sJ"
-url = f"https://api.sportmonks.com/v3/football/fixtures?api_token={API_TOKEN}&include=participants;league;season"
+API_TOKEN = os.getenv("SPORTMONKS_TOKEN")  
 
-response = requests.get(url)
-print("Status code:", response.status_code)
+url = f"https://api.sportmonks.com/v3/football/fixtures?api_token={API_TOKEN}&include=league,season,participants"  
 
-if response.status_code == 200:
-    data = response.json()
-    print("✅ Conexão bem-sucedida! Exemplo de retorno:")
-    print(data)
-else:
-    print("❌ Erro da API:", response.text)
+response = requests.get(url)  
+
+print("Status:", response.status_code)  
+print(response.text)
