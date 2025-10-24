@@ -37,22 +37,27 @@ def get_json(endpoint, params=None):
 # COLETA DE PARTIDAS (corrigida para API v3)
 # ==============================
 def fetch_upcoming_fixtures():
-    start = datetime.utcnow()
-    end = start + timedelta(hours=48)
+    start = datetime.utcnow().strftime("%Y-%m-%d")
+    end = (datetime.utcnow() + timedelta(days=2)).strftime("%Y-%m-%d")
 
-    # Endpoint atualizado da SportMonks v3
-    endpoint = f"fixtures/between/{start.strftime('%Y-%m-%d')}/{end.strftime('%Y-%m-%d')}"
-
+    endpoint = f"fixtures/between/{start}/{end}"
     params = {
         "include": "participants;league",
-        "filters[status]": "NS",  # NS = Not Started
-        "page": 1,
+        "filters": "upcoming",   # ✅ Formato v3 correto
         "per_page": 25,
+        "api_token": SPORTMONKS_TOKEN
     }
 
     print(f"🌍 Testando conexão com SportMonks e listando partidas...\nURL: {BASE_URL}/{endpoint}")
 
-    data = get_json(endpoint, params)
+    try:
+        r = requests.get(f"{BASE_URL}/{endpoint}", params=params, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        print(f"❌ Erro HTTP: {e}")
+        return []
+
     if not data or "data" not in data:
         print("❌ Nenhuma partida retornada pela API (verifique token ou filtros).")
         return []
@@ -61,8 +66,7 @@ def fetch_upcoming_fixtures():
     for f in data["data"]:
         try:
             kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00"))
-            if start <= kickoff <= end:
-                fixtures.append(f)
+            fixtures.append(f)
         except Exception as e:
             print("Erro ao processar partida:", e)
             continue
