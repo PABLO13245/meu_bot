@@ -270,7 +270,7 @@ async def main():
     while True:
         await asyncio.sleep(60)
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     if os.environ.get("TEST_NOW", "0") == "1":
         print("🚀 Executando teste manual de análise...")
         asyncio.run(run_analysis_send(3))
