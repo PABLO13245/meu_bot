@@ -1,6 +1,6 @@
 import requests
 
-API_TOKEN = "SEU_TOKEN_AQUI"  # coloque seu token válido aqui
+API_TOKEN = "eNQYLjIAtZ5co7oMxlzyTPd4fb3s2lzRpDnQpNm9hoBL7sDoYr1HNHQKhPul"
 url = f"https://api.sportmonks.com/v3/football/fixtures?api_token={API_TOKEN}&include=participants;league;season"
 
 response = requests.get(url)
