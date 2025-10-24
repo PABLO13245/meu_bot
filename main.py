@@ -1,7 +1,7 @@
 import os
 import asyncio
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Bot
 import pytz
@@ -34,30 +34,25 @@ def get_json(endpoint, params=None):
         return None
 
 # ==============================
-# COLETA DE PARTIDAS (corrigidapara API v3)
+# COLETA DE PARTIDAS (corrigida)
 # ==============================
 def fetch_upcoming_fixtures():
-    start = datetime.utcnow().strftime("%Y-%m-%d")
-    end = (datetime.utcnow() + timedelta(days=2)).strftime("%Y-%m-%d")
+    start = datetime.now(timezone.utc)
+    end = start + timedelta(hours=48)
 
-    # ✅ Endpoint corrigido para pegar partidas futuras
-    endpoint = "fixtures/upcoming"
+    endpoint = f"fixtures/between/{start.strftime('%Y-%m-%d')}/{end.strftime('%Y-%m-%d')}"
+
     params = {
         "include": "participants;league",
+        "filters[status]": "NS",  # NS = Not Started
+        "page": 1,
         "per_page": 25,
-        "api_token": SPORTMONKS_TOKEN
     }
 
-    print(f"🌍 Testando conexão com SportMonks e listando partidas...\nURL: {BASE_URL}/{endpoint}")
+    print(f"🌍 Testando conexão com SportMonks e listando partidas...")
+    print(f"🔗 URL: {BASE_URL}/{endpoint}")
 
-    try:
-        r = requests.get(f"{BASE_URL}/{endpoint}", params=params, timeout=20)
-        r.raise_for_status()
-        data = r.json()
-    except Exception as e:
-        print(f"❌ Erro HTTP: {e}")
-        return []
-
+    data = get_json(endpoint, params)
     if not data or "data" not in data:
         print("❌ Nenhuma partida retornada pela API (verifique token ou filtros).")
         return []
@@ -66,7 +61,8 @@ def fetch_upcoming_fixtures():
     for f in data["data"]:
         try:
             kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00"))
-            fixtures.append(f)
+            if start <= kickoff <= end:
+                fixtures.append(f)
         except Exception as e:
             print("Erro ao processar partida:", e)
             continue
@@ -264,7 +260,7 @@ def start_scheduler():
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(3)), "cron", hour=15, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(3)), "cron", hour=19, minute=0)
     scheduler.start()
-    print("Scheduler ativo: 06:00, 15:00, 19:00 BRT")
+    print("Agendador ativo: 06:00, 15:00, 19:00 BRT")
 
 # ==============================
 # START BOT
@@ -274,31 +270,9 @@ async def main():
     while True:
         await asyncio.sleep(60)
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     if os.environ.get("TEST_NOW", "0") == "1":
+        print("🚀 Executando teste manual de análise...")
         asyncio.run(run_analysis_send(3))
-        # ==============================
-# TESTE MANUAL
-# ==============================
-if __name__ == "__main__":
-    print("🔍 Testando busca de partidas nas próximas 48h...")
-    partidas = fetch_upcoming_fixtures()
-    if not partidas:
-        print("⚠ Nenhuma partida encontrada. Verifique filtros, token ou conexão.")
     else:
-        print(f"✅ {len(partidas)} partidas encontradas!\n")
-        for i, p in enumerate(partidas[:5], start=1):
-            try:
-                home = p["participants"][0]["name"]
-                away = p["participants"][1]["name"]
-                hora = p["starting_at"]
-                print(f"{i}. {home} x {away} — {hora}")
-            except Exception as e:
-                print(f"{i}. Erro ao exibir partida: {e}")
-
-    # Descomente para testar envio no Telegram:
-    # asyncio.run(run_analysis_send(3))
-
-    # Comente abaixo para não rodar o agendador durante o teste
-    # asyncio.run(main())
-    asyncio.run(main())
+        asyncio.run(main())
