@@ -10,7 +10,7 @@ from statistics import mean
 # CONFIGURAÇÕES
 SPORTMONKS_TOKEN = "JtleZ8exFFGvZQWYxRfjmqqWdmxkxKG6FrVGPOAVRpsqyRNAoPfezreZka64"  # seu token aqui
 BOT_TOKEN = "8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE"  # se quiser testar sem variável
-CHAT_ID = "5249180465"  # ID do seu chat
+CHAT_ID = "5245918045"  # ID do seu chat
 TZ = pytz.timezone("America/Sao_Paulo")
 
 BASE_URL = f"https://api.sportmonks.com/v3/football"
