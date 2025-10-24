@@ -273,4 +273,28 @@ async def main():
 if __name__ == "__main__":
     if os.environ.get("TEST_NOW", "0") == "1":
         asyncio.run(run_analysis_send(3))
+        # ==============================
+# TESTE MANUAL
+# ==============================
+if __name__ == "__main__":
+    print("🔍 Testando busca de partidas nas próximas 48h...")
+    partidas = fetch_upcoming_fixtures()
+    if not partidas:
+        print("⚠ Nenhuma partida encontrada. Verifique filtros, token ou conexão.")
+    else:
+        print(f"✅ {len(partidas)} partidas encontradas!\n")
+        for i, p in enumerate(partidas[:5], start=1):
+            try:
+                home = p["participants"][0]["name"]
+                away = p["participants"][1]["name"]
+                hora = p["starting_at"]
+                print(f"{i}. {home} x {away} — {hora}")
+            except Exception as e:
+                print(f"{i}. Erro ao exibir partida: {e}")
+
+    # Descomente para testar envio no Telegram:
+    # asyncio.run(run_analysis_send(3))
+
+    # Comente abaixo para não rodar o agendador durante o teste
+    # asyncio.run(main())
     asyncio.run(main())
