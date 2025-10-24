@@ -34,9 +34,9 @@ def get_json(endpoint, params=None):
         return None
 
 # ==============================
-# COLETA DE PARTIDAS (corrigida para API v3)
-# ============================
- def fetch_upcoming_fixtures():
+# COLETA DE PARTIDAS (corrigidapara API v3)
+# ==============================
+def fetch_upcoming_fixtures():
     start = datetime.utcnow().strftime("%Y-%m-%d")
     end = (datetime.utcnow() + timedelta(days=2)).strftime("%Y-%m-%d")
 
@@ -72,7 +72,7 @@ def get_json(endpoint, params=None):
             continue
 
     print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
-    return fixtures       
+    return fixtures
 
 # ==============================
 # PARTIDAS ANTERIORES POR TIME
