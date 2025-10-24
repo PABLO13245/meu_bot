@@ -17,3 +17,13 @@ if "data" in data and len(data["data"]) > 0:
 else:
     print("Nenhum jogo encontrado ou erro na resposta:")
     print(data)
+import asyncio, aiohttp
+
+async def main():
+    url = "https://api.sportmonks.com/v3/football/fixtures/date/2025-10-26?api_token=eNQYLjIAtZ5co7oMxlzyTPd4fb3s2lzRpDnQpNm9hoBL7sDoYr1HNHQKhPul"
+    async with aiohttp.ClientSession() as s:
+        async with s.get(url) as r:
+            print("Status:", r.status)
+            print(await r.text())
+
+asyncio.run(main())
