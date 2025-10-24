@@ -1,4 +1,3 @@
-# main.py — Bot de Análises de Futebol (SportMonks)
 import os
 import asyncio
 import requests
@@ -27,26 +26,24 @@ def get_json(endpoint, params=None):
         params = {}
     params["api_token"] = SPORTMONKS_TOKEN
     try:
-        r = requests.get(f"{BASE_URL}/{endpoint}", params=params, timeout=15)
+        r = requests.get(f"{BASE_URL}/{endpoint}", params=params, timeout=20)
         r.raise_for_status()
         return r.json()
     except Exception as e:
-        print("HTTP error:", e)
+        print("❌ Erro HTTP:", e)
         return None
 
 # ==============================
-# COLETA DE PARTIDAS
+# COLETA DE PARTIDAS (ajustada)
 # ==============================
 def fetch_upcoming_fixtures():
     start = datetime.utcnow()
     end = start + timedelta(hours=48)
 
-    # Parâmetros ajustados para v3 — apenas datas e status
     params = {
-        "date_from": start.strftime("%Y-%m-%d"),
-        "date_to": end.strftime("%Y-%m-%d"),
-        "status": "NS",  # NS = not started
-        "per_page": 20
+        "include": "participants;league",
+        "filters[status]": "NS",  # NS = Not Started
+        "per_page": 50
     }
 
     data = get_json("fixtures", params)
@@ -62,31 +59,20 @@ def fetch_upcoming_fixtures():
                 fixtures.append(f)
         except Exception as e:
             print("Erro ao processar partida:", e)
-            continue
 
     print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
     return fixtures
 
-    fixtures = []
-    for f in data["data"]:
-        try:
-            kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00"))
-            if start <= kickoff <= end:
-                fixtures.append(f)
-        except Exception as e:
-            print("Erro ao processar partida:", e)
-            continue
-
-    print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
-    return fixtures
-
+# ==============================
+# PARTIDAS ANTERIORES POR TIME
+# ==============================
 def fetch_last_matches_for_team(team_id, last=5):
     params = {
+        "include": "participants;stats",
         "filters[team_id]": team_id,
-        "filters[status]": "finished",
-        "include": "stats",
-        "per_page": last,
-        "sort": "-starting_at"
+        "filters[status]": "FT",  # FT = Finished
+        "sort": "-starting_at",
+        "per_page": last
     }
     data = get_json("fixtures", params)
     return data["data"] if data and "data" in data else []
@@ -116,13 +102,14 @@ def compute_team_metrics(team_id):
         if str(home_id) == str(team_id):
             goals_for.append(g_home)
             goals_against.append(g_away)
-            if g_home > g_away: wins += 1
+            if g_home > g_away:
+                wins += 1
         else:
             goals_for.append(g_away)
             goals_against.append(g_home)
-            if g_away > g_home: wins += 1
+            if g_away > g_home:
+                wins += 1
 
-        # Estatísticas (escanteios)
         stats = m.get("stats", [])
         for s in stats:
             if str(s.get("team_id")) == str(team_id):
@@ -151,17 +138,23 @@ def decide_suggestion(home_metrics, away_metrics):
     win_delta = home_metrics["win_rate"] - away_metrics["win_rate"]
 
     suggestions = []
-    if goals_sum >= 2.8: suggestions.append("+2.5 Gols")
-    elif goals_sum >= 2.0: suggestions.append("+1.5 Gols")
+    if goals_sum >= 2.8:
+        suggestions.append("+2.5 Gols")
+    elif goals_sum >= 2.0:
+        suggestions.append("+1.5 Gols")
 
     if home_metrics["avg_goals_for"] >= 1.1 and away_metrics["avg_goals_for"] >= 1.1:
         suggestions.append("Ambas Marcam")
 
-    if corners_sum >= 9: suggestions.append("+8.5 Escanteios")
-    elif corners_sum >= 7: suggestions.append("+7.5 Escanteios")
+    if corners_sum >= 9:
+        suggestions.append("+8.5 Escanteios")
+    elif corners_sum >= 7:
+        suggestions.append("+7.5 Escanteios")
 
-    if win_delta >= 0.35: suggestions.append("Vitória provável do Mandante")
-    elif win_delta <= -0.35: suggestions.append("Vitória provável do Visitante")
+    if win_delta >= 0.35:
+        suggestions.append("Vitória provável do Mandante")
+    elif win_delta <= -0.35:
+        suggestions.append("Vitória provável do Visitante")
 
     conf = 0
     conf += max(0, win_delta) * 50
@@ -175,7 +168,7 @@ def decide_suggestion(home_metrics, away_metrics):
     return suggestions, confidence
 
 # ==============================
-# FORMATAÇÃO DE MENSAGEM
+# FORMATAR MENSAGEM
 # ==============================
 def country_flag_from_name(name):
     mapping = {
