@@ -48,7 +48,7 @@ def get_json(endpoint, params=None):
         print(f"❌ Erro na requisição: {e}")
         return None
 
-# 🧠 COLETA DE PARTIDAS (versão ajustada)
+# 🧩 COLETA DE PARTIDAS (versão ajustada e completa)
 def fetch_upcoming_fixtures():
     start = datetime.now(timezone.utc)
     end = start + timedelta(days=3)  # buscar próximos 3 dias
@@ -56,15 +56,15 @@ def fetch_upcoming_fixtures():
     end_str = end.strftime("%Y-%m-%d")
 
     endpoint = "fixtures"
-params = {
-    "include": "participants;league",
-    "filters[status]": "NS",  # partidas não iniciadas
-    "filter[starting_at_between]": f"{start_str},{end_str}",
-    "page": 1,
-    "per_page": 50,
-}
+    params = {
+        "include": "participants;league",
+        "filters[status]": "NS",  # partidas não iniciadas
+        "filter[starting_at_between]": f"{start_str},{end_str}",
+        "page": 1,
+        "per_page": 50,
+    }
 
-    print(f"🔍 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}")
+    print(f"🧩 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}")
 
     data = get_json(endpoint, params)
 
@@ -75,8 +75,9 @@ params = {
     fixtures = data["data"]
     print(f"✅ {len(fixtures)} partidas encontradas com status 'NS' (Not Started).")
 
-    for f in fixtures[:5]:  # mostra as 5 primeiras para testar
-        teams = [p['name'] for p in f.get('participants', [])]
+    # 🔹 Mostrar as 5 primeiras partidas para teste
+    for f in fixtures[:5]:
+        teams = [p["name"] for p in f.get("participants", [])]
         print(f"⚽ {f['id']} | {' x '.join(teams)}")
 
     return fixtures
