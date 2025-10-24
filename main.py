@@ -60,7 +60,7 @@ params = {
     "filter[starts_between]": f"{start_str},{end_str}",
     "include": "participants;league",
 }
-    params = {
+params = {
         "include": "participants;league",
         "filters[status]": "NS",  # partidas não iniciadas
         "page": 1,
