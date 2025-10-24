@@ -40,7 +40,6 @@ def fetch_upcoming_fixtures():
     start = datetime.utcnow()
     end = start + timedelta(hours=48)
 
-    # Nova query compatível com API v3
     params = {
         "include": "participants;league",
         "filters[date_from]": start.strftime("%Y-%m-%d"),
@@ -68,18 +67,6 @@ def fetch_upcoming_fixtures():
     print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
     return fixtures
 
-    fixtures = []
-    for f in data["data"]:
-        try:
-            kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00"))
-            if start <= kickoff <= end:
-                fixtures.append(f)
-        except Exception as e:
-            print("Erro ao processar partida:", e)
-
-    print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
-    return fixtures
-
 # ==============================
 # PARTIDAS ANTERIORES POR TIME
 # ==============================
@@ -87,7 +74,7 @@ def fetch_last_matches_for_team(team_id, last=5):
     params = {
         "include": "participants;stats",
         "filters[team_id]": team_id,
-        "filters[status]": "FT",  # FT = Finished
+        "filters[status]": "FT",
         "sort": "-starting_at",
         "per_page": last
     }
@@ -273,9 +260,19 @@ def start_scheduler():
     print("Scheduler ativo: 06:00, 15:00, 19:00 BRT")
 
 # ==============================
-# START BOT
+# START BOT (com teste de partidas)
 # ==============================
 async def main():
+    # 🧩 Teste inicial: listar partidas no terminal
+    print("🔍 Testando conexão com SportMonks e listando partidas...")
+    fixtures = fetch_upcoming_fixtures()
+    for f in fixtures[:10]:
+        league = f.get("league", {}).get("name", "Desconhecida")
+        date = f["starting_at"]
+        print(f"→ {f['id']} | {league} | {date}")
+
+    print(f"✅ Total encontrado: {len(fixtures)} partidas.\n")
+
     start_scheduler()
     while True:
         await asyncio.sleep(60)
