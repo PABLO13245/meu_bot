@@ -63,11 +63,6 @@ params = {
     "page": 1,
     "per_page": 50,
 }
-        "include": "participants;league",
-        "filters[status]": "NS",  # partidas não iniciadas
-        "page": 1,
-        "per_page": 50
-    }
 
     print(f"🔍 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}...")
 
