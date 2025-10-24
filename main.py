@@ -40,16 +40,33 @@ def fetch_upcoming_fixtures():
     start = datetime.utcnow()
     end = start + timedelta(hours=48)
 
+    # Nova query compatível com API v3
     params = {
         "include": "participants;league",
-        "filters[status]": "NS",  # NS = Not Started
-        "per_page": 50
+        "filters[date_from]": start.strftime("%Y-%m-%d"),
+        "filters[date_to]": end.strftime("%Y-%m-%d"),
+        "filters[status]": "NS",
+        "page": 1,
+        "per_page": 25
     }
 
     data = get_json("fixtures", params)
     if not data or "data" not in data:
-        print("❌ Nenhuma partida retornada pela API.")
+        print("❌ Nenhuma partida retornada pela API (verifique token ou filtros).")
         return []
+
+    fixtures = []
+    for f in data["data"]:
+        try:
+            kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00"))
+            if start <= kickoff <= end:
+                fixtures.append(f)
+        except Exception as e:
+            print("Erro ao processar partida:", e)
+            continue
+
+    print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
+    return fixtures
 
     fixtures = []
     for f in data["data"]:
