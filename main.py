@@ -53,7 +53,7 @@ def fetch_upcoming_fixtures():
         "per_page": 50,
     }
 
-    print("🧠 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}...")
+    print(f"🧠 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}...")
     data = get_request(endpoint, params)
 
     if not data or 'data' not in data:
