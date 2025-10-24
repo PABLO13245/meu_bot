@@ -26,7 +26,9 @@ def get_json(endpoint, params=None):
         params = {}
     params["api_token"] = SPORTMONKS_TOKEN
     try:
-        r = requests.get(f"{BASE_URL}/{endpoint}", params=params, timeout=20)
+        url = f"{BASE_URL}/{endpoint}"
+        print(f"🔗 Requisitando: {url}")
+        r = requests.get(url, params=params, timeout=20)
         r.raise_for_status()
         return r.json()
     except Exception as e:
@@ -39,20 +41,21 @@ def get_json(endpoint, params=None):
 def fetch_upcoming_fixtures():
     start = datetime.now(timezone.utc)
     end = start + timedelta(hours=48)
+    start_str = start.strftime('%Y-%m-%d')
+    end_str = end.strftime('%Y-%m-%d')
 
-    endpoint = f"fixtures/between/{start.strftime('%Y-%m-%d')}/{end.strftime('%Y-%m-%d')}"
+    endpoint = f"fixtures/between/{start_str}/{end_str}"
 
     params = {
         "include": "participants;league",
         "filters[status]": "NS",  # NS = Not Started
         "page": 1,
-        "per_page": 25,
+        "per_page": 50,
     }
 
-    print(f"🌍 Testando conexão com SportMonks e listando partidas...")
-    print(f"🔗 URL: {BASE_URL}/{endpoint}")
-
+    print(f"🌍 Testando conexão com SportMonks e listando partidas entre {start_str} e {end_str}...")
     data = get_json(endpoint, params)
+
     if not data or "data" not in data:
         print("❌ Nenhuma partida retornada pela API (verifique token ou filtros).")
         return []
@@ -64,29 +67,26 @@ def fetch_upcoming_fixtures():
             if start <= kickoff <= end:
                 fixtures.append(f)
         except Exception as e:
-            print("Erro ao processar partida:", e)
+            print("⚠ Erro ao processar partida:", e)
             continue
 
     print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
     return fixtures
 
 # ==============================
-# PARTIDAS ANTERIORES POR TIME
+# RESTANTE DO SEU CÓDIGO (SEM MUDANÇAS)
 # ==============================
 def fetch_last_matches_for_team(team_id, last=5):
     params = {
         "include": "participants;stats",
         "filters[team_id]": team_id,
-        "filters[status]": "FT",  # FT = Finished
+        "filters[status]": "FT",
         "sort": "-starting_at",
         "per_page": last
     }
     data = get_json("fixtures", params)
     return data["data"] if data and "data" in data else []
 
-# ==============================
-# CÁLCULO DE MÉTRICAS
-# ==============================
 def compute_team_metrics(team_id):
     matches = fetch_last_matches_for_team(team_id, last=5)
     goals_for, goals_against, corners_for = [], [], []
@@ -136,9 +136,6 @@ def compute_team_metrics(team_id):
         "win_rate": win_rate,
     }
 
-# ==============================
-# REGRAS DE ANÁLISE
-# ==============================
 def decide_suggestion(home_metrics, away_metrics):
     goals_sum = home_metrics["avg_goals_for"] + away_metrics["avg_goals_for"]
     corners_sum = home_metrics["avg_corners"] + away_metrics["avg_corners"]
@@ -174,9 +171,6 @@ def decide_suggestion(home_metrics, away_metrics):
 
     return suggestions, confidence
 
-# ==============================
-# FORMATAR MENSAGEM
-# ==============================
 def country_flag_from_name(name):
     mapping = {
         "brazil": "🇧🇷", "england": "🏴", "spain": "🇪🇸", "france": "🇫🇷",
@@ -236,9 +230,6 @@ def build_message(fixtures, qty):
     lines.append(footer)
     return "\n".join(lines)
 
-# ==============================
-# EXECUÇÃO PRINCIPAL
-# ==============================
 async def run_analysis_send(qtd):
     try:
         fixtures = fetch_upcoming_fixtures()
@@ -251,9 +242,6 @@ async def run_analysis_send(qtd):
     except Exception as e:
         await bot.send_message(CHAT_ID, f"❌ Erro na análise: {e}")
 
-# ==============================
-# AGENDADOR
-# ==============================
 def start_scheduler():
     scheduler = AsyncIOScheduler(timezone=TZ)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(3)), "cron", hour=6, minute=0)
@@ -262,9 +250,6 @@ def start_scheduler():
     scheduler.start()
     print("Agendador ativo: 06:00, 15:00, 19:00 BRT")
 
-# ==============================
-# START BOT
-# ==============================
 async def main():
     start_scheduler()
     while True:
