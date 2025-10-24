@@ -41,24 +41,26 @@ def get_json(endpoint, params=None):
 def fetch_upcoming_fixtures():
     start = datetime.now(timezone.utc)
     end = start + timedelta(hours=48)
-    start_str = start.strftime('%Y-%m-%d')
-    end_str = end.strftime('%Y-%m-%d')
+    start_str = start.strftime("%Y-%m-%d")
+    end_str = end.strftime("%Y-%m-%d")
 
     endpoint = "fixtures"
-params = {
-    "include": "participants;league",
-    "filters[status]": "NS",  # NS = Not Started
-    "filter[starting_at_between]": f"{start_str},{end_str}",
-    "page": 1,
-    "per_page": 50,
-}
+    params = {
+        "include": "participants;league",
+        "filters[status]": "NS",  # NS = Not Started
+        "filter[starting_at_between]": f"{start_str},{end_str}",
+        "page": 1,
+        "per_page": 50,
+    }
 
-    print(f"🌍 Testando conexão com SportMonks e listando partidas entre {start_str} e {end_str}...")
-    data = get_json(endpoint, params)
+    print("🧠 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}...")
+    data = get_request(endpoint, params)
 
-    if not data or "data" not in data:
+    if not data or 'data' not in data:
         print("❌ Nenhuma partida retornada pela API (verifique token ou filtros).")
         return []
+    
+    return data['data']
 
     fixtures = []
     for f in data["data"]:
