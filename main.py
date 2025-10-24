@@ -40,22 +40,28 @@ def get_json(endpoint, params=None):
 def fetch_upcoming_fixtures():
     start = datetime.utcnow()
     end = start + timedelta(hours=48)
+
+    # busca partidas futuras (status = 'not_started')
     params = {
-        "include": "participants,league",
-        "per_page": 10,
+        "filters[status]": "not_started",
+        "per_page": 20
     }
     data = get_json("fixtures", params)
     if not data or "data" not in data:
+        print("❌ Nenhuma partida retornada pela API.")
         return []
-    # Filtra localmente por data
+
     fixtures = []
     for f in data["data"]:
         try:
             kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00"))
             if start <= kickoff <= end:
                 fixtures.append(f)
-        except Exception:
+        except Exception as e:
+            print("Erro ao processar partida:", e)
             continue
+
+    print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
     return fixtures
 
 def fetch_last_matches_for_team(team_id, last=5):
