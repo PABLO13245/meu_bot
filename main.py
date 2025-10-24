@@ -55,7 +55,11 @@ def fetch_upcoming_fixtures():
     start_str = start.strftime("%Y-%m-%d")
     end_str = end.strftime("%Y-%m-%d")
 
-    endpoint = f"football/fixtures/between/{start_str}/{end_str}"
+    endpoint = "fixtures"
+params = {
+    "filter[starts_between]": f"{start_str},{end_str}",
+    "include": "participants;league",
+}
     params = {
         "include": "participants;league",
         "filters[status]": "NS",  # partidas não iniciadas
