@@ -34,22 +34,25 @@ def get_json(endpoint, params=None):
         return None
 
 # ==============================
-# COLETA DE PARTIDAS (ajustada)
+# COLETA DE PARTIDAS (corrigida para API v3)
 # ==============================
 def fetch_upcoming_fixtures():
     start = datetime.utcnow()
     end = start + timedelta(hours=48)
 
+    # Endpoint atualizado da SportMonks v3
+    endpoint = f"fixtures/between/{start.strftime('%Y-%m-%d')}/{end.strftime('%Y-%m-%d')}"
+
     params = {
         "include": "participants;league",
-        "filters[date_from]": start.strftime("%Y-%m-%d"),
-        "filters[date_to]": end.strftime("%Y-%m-%d"),
-        "filters[status]": "NS",
+        "filters[status]": "NS",  # NS = Not Started
         "page": 1,
-        "per_page": 25
+        "per_page": 25,
     }
 
-    data = get_json("fixtures", params)
+    print(f"🌍 Testando conexão com SportMonks e listando partidas...\nURL: {BASE_URL}/{endpoint}")
+
+    data = get_json(endpoint, params)
     if not data or "data" not in data:
         print("❌ Nenhuma partida retornada pela API (verifique token ou filtros).")
         return []
@@ -74,7 +77,7 @@ def fetch_last_matches_for_team(team_id, last=5):
     params = {
         "include": "participants;stats",
         "filters[team_id]": team_id,
-        "filters[status]": "FT",
+        "filters[status]": "FT",  # FT = Finished
         "sort": "-starting_at",
         "per_page": last
     }
@@ -260,19 +263,9 @@ def start_scheduler():
     print("Scheduler ativo: 06:00, 15:00, 19:00 BRT")
 
 # ==============================
-# START BOT (com teste de partidas)
+# START BOT
 # ==============================
 async def main():
-    # 🧩 Teste inicial: listar partidas no terminal
-    print("🔍 Testando conexão com SportMonks e listando partidas...")
-    fixtures = fetch_upcoming_fixtures()
-    for f in fixtures[:10]:
-        league = f.get("league", {}).get("name", "Desconhecida")
-        date = f["starting_at"]
-        print(f"→ {f['id']} | {league} | {date}")
-
-    print(f"✅ Total encontrado: {len(fixtures)} partidas.\n")
-
     start_scheduler()
     while True:
         await asyncio.sleep(60)
@@ -280,28 +273,4 @@ async def main():
 if __name__ == "__main__":
     if os.environ.get("TEST_NOW", "0") == "1":
         asyncio.run(run_analysis_send(3))
-        # ==============================
-# TESTE MANUAL
-# ==============================
-if __name__ == "__main__":
-    print("🔍 Testando busca de partidas nas próximas 48h...")
-    partidas = fetch_upcoming_fixtures()
-    if not partidas:
-        print("⚠ Nenhuma partida encontrada. Verifique filtros, token ou conexão.")
-    else:
-        print(f"✅ {len(partidas)} partidas encontradas!\n")
-        for i, p in enumerate(partidas[:5], start=1):
-            try:
-                home = p["participants"][0]["name"]
-                away = p["participants"][1]["name"]
-                hora = p["starting_at"]
-                print(f"{i}. {home} x {away} — {hora}")
-            except Exception as e:
-                print(f"{i}. Erro ao exibir partida: {e}")
-
-    # Descomente para testar envio no Telegram:
-    # asyncio.run(run_analysis_send(3))
-
-    # Comente abaixo para não rodar o agendador durante o teste
-    # asyncio.run(main())
     asyncio.run(main())
