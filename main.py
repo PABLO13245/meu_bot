@@ -44,14 +44,14 @@ def fetch_upcoming_fixtures():
     start_str = start.strftime('%Y-%m-%d')
     end_str = end.strftime('%Y-%m-%d')
 
-    endpoint = f"fixtures/between/{start_str}/{end_str}"
-
-    params = {
-        "include": "participants;league",
-        "filters[status]": "NS",  # NS = Not Started
-        "page": 1,
-        "per_page": 50,
-    }
+    endpoint = "fixtures"
+params = {
+    "include": "participants;league",
+    "filters[status]": "NS",  # NS = Not Started
+    "filter[starting_at_between]": f"{start_str},{end_str}",
+    "page": 1,
+    "per_page": 50,
+}
 
     print(f"🌍 Testando conexão com SportMonks e listando partidas entre {start_str} e {end_str}...")
     data = get_json(endpoint, params)
