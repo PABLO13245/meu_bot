@@ -8,7 +8,7 @@ import pytz
 from statistics import mean
 
 # CONFIGURAÇÕES
-SPORTMONKS_TOKEN = "JtleZ8exFFGvZQWYxRfjmqqWdmxkxKG6FrVGPOAVRpsqyRNAoPfezreZka64"  # seu token aqui
+SPORTMONKS_TOKEN = "poBgEc23XAtTi2BEDIF7MmyY5BRAji5zkB1rAwTlXi1vA0B5NbuKJcLBK4sJ"  # seu token aqui
 BOT_TOKEN = "8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE"  # se quiser testar sem variável
 CHAT_ID = "5245918045"  # ID do seu chat
 TZ = pytz.timezone("America/Sao_Paulo")
@@ -54,7 +54,7 @@ def fetch_upcoming_fixtures():
     import requests
     from datetime import datetime, timedelta, timezone
 
-    API_TOKEN = "SEU_TOKEN_AQUI"  # substitua pelo seu token real
+    API_TOKEN = "poBgEc23XAtTi2BEDIF7MmyY5BRAji5zkB1rAwTlXi1vA0B5NbuKJcLBK4sJ"  # substitua pelo seu token real
     start = datetime.now(timezone.utc)
     end = start + timedelta(days=3)  # buscar próximos 3 dias
     start_str = start.strftime("%Y-%m-%d")
