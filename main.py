@@ -35,44 +35,36 @@ def get_json(endpoint, params=None):
         print("❌ Erro HTTP:", e)
         return None
 
-# ==============================
-# COLETA DE PARTIDAS (corrigida)
-# ==============================
+# 🧠 COLETA DE PARTIDAS (versão ajustada)
 def fetch_upcoming_fixtures():
     start = datetime.now(timezone.utc)
-    end = start + timedelta(hours=48)
+    end = start + timedelta(days=3)  # buscar próximos 3 dias
     start_str = start.strftime("%Y-%m-%d")
     end_str = end.strftime("%Y-%m-%d")
 
-    endpoint = "fixtures"
+    endpoint = f"football/fixtures/between/{start_str}/{end_str}"
     params = {
         "include": "participants;league",
-        "filters[status]": "NS",  # NS = Not Started
-        "filter[starting_at_between]": f"{start_str},{end_str}",
+        "filters[status]": "NS",  # partidas não iniciadas
         "page": 1,
-        "per_page": 50,
+        "per_page": 50
     }
 
-    print(f"🧠 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}...")
-    data = get_request(endpoint, params)
+    print(f"🔍 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}...")
 
-    if not data or 'data' not in data:
+    data = get_json(endpoint, params)
+
+    if not data or "data" not in data:
         print("❌ Nenhuma partida retornada pela API (verifique token ou filtros).")
         return []
-    
-    return data['data']
 
-    fixtures = []
-    for f in data["data"]:
-        try:
-            kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00"))
-            if start <= kickoff <= end:
-                fixtures.append(f)
-        except Exception as e:
-            print("⚠ Erro ao processar partida:", e)
-            continue
+    fixtures = data["data"]
+    print(f"✅ {len(fixtures)} partidas encontradas com status 'NS' (Not Started).")
 
-    print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
+    for f in fixtures[:5]:  # mostra as 5 primeiras para testar
+        teams = [p['name'] for p in f.get('participants', [])]
+        print(f"⚽ {f['id']} | {' x '.join(teams)}")
+
     return fixtures
 
 # ==============================
