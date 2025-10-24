@@ -7,13 +7,14 @@ from telegram import Bot
 import pytz
 from statistics import mean
 
-# ==============================
 # CONFIGURAÇÕES
-# ==============================
-SPORTMONKS_TOKEN = "2HkQn0wO1VKISuHJfb2ZTdA7BMxXqiK0A0xZ6UZ2ewnro1HNJ2P7NPee28D1"
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE")
-CHAT_ID = os.environ.get("CHAT_ID", "5245918045")
+SPORTMONKS_TOKEN = "2MhRQMo0VkISUhjBf27ZdABP8XcK8QA2xGZUZemcn0uJN72PTNee2801"  # seu token aqui
+BOT_TOKEN = "8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE"  # se quiser testar sem variável
+CHAT_ID = "5249180465"  # ID do seu chat
 TZ = pytz.timezone("America/Sao_Paulo")
+
+BASE_URL = f"https://api.sportmonks.com/v3/football"
+bot = Bot(token=BOT_TOKEN)
 
 BASE_URL = "https://api.sportmonks.com/v3/football"
 bot = Bot(token=BOT_TOKEN)
