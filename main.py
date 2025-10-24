@@ -35,15 +35,15 @@ def get_json(endpoint, params=None):
 
 # ==============================
 # COLETA DE PARTIDAS (corrigida para API v3)
-# ==============================
-def fetch_upcoming_fixtures():
+# ============================
+ def fetch_upcoming_fixtures():
     start = datetime.utcnow().strftime("%Y-%m-%d")
     end = (datetime.utcnow() + timedelta(days=2)).strftime("%Y-%m-%d")
 
-    endpoint = f"fixtures/between/{start}/{end}"
+    # ✅ Endpoint corrigido para pegar partidas futuras
+    endpoint = "fixtures/upcoming"
     params = {
         "include": "participants;league",
-        "filters": "upcoming",   # ✅ Formato v3 correto
         "per_page": 25,
         "api_token": SPORTMONKS_TOKEN
     }
@@ -72,7 +72,7 @@ def fetch_upcoming_fixtures():
             continue
 
     print(f"✅ {len(fixtures)} partidas encontradas nas próximas 48h.")
-    return fixtures
+    return fixtures       
 
 # ==============================
 # PARTIDAS ANTERIORES POR TIME
