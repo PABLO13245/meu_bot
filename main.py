@@ -283,7 +283,7 @@ if __name__ == "__main__":
         # ==============================
 # TESTE MANUAL
 # ==============================
-if _name_ == "_main_":
+if __name__ == "__main__":
     print("🔍 Testando busca de partidas nas próximas 48h...")
     partidas = fetch_upcoming_fixtures()
     if not partidas:
