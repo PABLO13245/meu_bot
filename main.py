@@ -64,7 +64,7 @@ params = {
     "per_page": 50,
 }
 
-    print(f"🔍 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}...")
+    print(f"🔍 Testando conexão com a SportMonks e listando partidas entre {start_str} e {end_str}")
 
     data = get_json(endpoint, params)
 
