@@ -22,17 +22,30 @@ bot = Bot(token=BOT_TOKEN)
 # FUNÇÃO DE REQUISIÇÃO
 # ==============================
 def get_json(endpoint, params=None):
-    if params is None:
-        params = {}
-    params["api_token"] = SPORTMONKS_TOKEN
+    base_url = "https://api.sportmonks.com/v3/"
+    token = os.getenv("SPORTMONKS_TOKEN")
+
+    if not token:
+        print("❌ ERRO: Variável de ambiente SPORTMONKS_TOKEN não encontrada.")
+        return None
+
+    headers = {"Authorization": f"Bearer {token}"}
+    url = f"{base_url}{endpoint}"
+
+    print(f"🌐 Requisitando: {url}")
     try:
-        url = f"{BASE_URL}/{endpoint}"
-        print(f"🔗 Requisitando: {url}")
-        r = requests.get(url, params=params, timeout=20)
-        r.raise_for_status()
-        return r.json()
+        response = requests.get(url, headers=headers, params=params)
+        print(f"🔢 Status code: {response.status_code}")
+
+        if response.status_code != 200:
+            print(f"⚠ Erro da API: {response.text}")
+            return None
+
+        data = response.json()
+        return data
+
     except Exception as e:
-        print("❌ Erro HTTP:", e)
+        print(f"❌ Erro na requisição: {e}")
         return None
 
 # 🧠 COLETA DE PARTIDAS (versão ajustada)
