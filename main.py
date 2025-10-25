@@ -10,9 +10,9 @@ from statistics import mean
 # ==============================
 # CONFIGURAÇÕES
 # ==============================
-API_TOKEN = os.getenv("API_TOKEN")  # Token da SportMonks
-BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Token do seu bot do Telegram
-CHAT_ID = os.getenv("CHAT_ID")  # ID do chat onde vai enviar as mensagens
+API_TOKEN = os.getenv("API_TOKEN")  # Token da SportMonks (v3)
+BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Token do bot do Telegram
+CHAT_ID = os.getenv("CHAT_ID")  # ID do chat onde as mensagens serão enviadas
 TZ = pytz.timezone("America/Sao_Paulo")
 
 BASE_URL = "https://api.sportmonks.com/v3/football"
@@ -46,17 +46,17 @@ def get_json(endpoint, params=None):
 
 
 # ==============================
-# BUSCAR PARTIDAS FUTURAS (CORRIGIDO)
+# BUSCAR PARTIDAS FUTURAS (CORRIGIDO PARA API v3)
 # ==============================
 def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
     import requests
 
+    # ✅ Endpoint atualizado para SportMonks v3
     url = (
-        "https://api.sportmonks.com/v3/football/fixtures"
+        f"https://api.sportmonks.com/v3/football/fixtures/between/{start_str}/{end_str}"
         f"?api_token={API_TOKEN}"
         "&include=participants;league;season"
-        f"&filters[status]=NS"
-        f"&filter[between]={start_str},{end_str}"
+        "&filters=status:NS"
         "&per_page=50"
     )
 
