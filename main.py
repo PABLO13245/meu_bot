@@ -8,9 +8,9 @@ import pytz
 from statistics import mean
 
 # CONFIGURAÇÕES
-SPORTMONKS_TOKEN = "poBgEc23XAtTi2BEDIF7MmyY5BRAji5zkB1rAwTlXi1vA0B5NbuKJcLBK4sJ"  # seu token aqui
-BOT_TOKEN = "8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE"  # se quiser testar sem variável
-CHAT_ID = "5245918045"  # ID do seu chat
+SPORTMONKS_TOKEN = "API_TOKEN"  # seu token aqui
+BOT_TOKEN = "TELEGRAM_TOKEN"  # se quiser testar sem variável
+CHAT_ID = "CHAT_ID"  # ID do seu chat
 TZ = pytz.timezone("America/Sao_Paulo")
 
 BASE_URL = f"https://api.sportmonks.com/v3/football"
