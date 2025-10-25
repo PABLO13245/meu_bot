@@ -48,20 +48,28 @@ def get_json(endpoint, params=None):
 # ==============================
 # BUSCAR PARTIDAS FUTURAS (CORRIGIDO)
 # ==============================
+import requests
+
 def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
-    url = (
-        "https://api.sportmonks.com/v3/football/fixtures"
-        f"?api_token={API_TOKEN}"
-        "&include=participants;league;season"
-        f"&filters[status]=NS"
-        f"&filters[between]={start_str},{end_str}"
-        "&per_page=50"
-    )
+    """
+    Busca partidas futuras (status = NS) usando a API v3 da Sportmonks.
+    Corrigido para usar parâmetros válidos da versão nova da API.
+    """
+    url = "https://api.sportmonks.com/v3/football/fixtures"
+
+    params = {
+        "api_token": API_TOKEN,
+        "include": "participants;league;season",
+        "filters[status]": "NS",
+        "filter[between]": f"{start_str},{end_str}",
+        "per_page": 50,
+    }
 
     print(f"🔵 Buscando partidas entre {start_str} e {end_str}...")
+
     try:
-        resposta = requests.get(url)
-        print(f"🔢 Status code: {resposta.status_code}")
+        resposta = requests.get(url, params=params)
+        print(f"📡 Status code: {resposta.status_code}")
 
         if resposta.status_code != 200:
             print(f"❌ Erro da API: {resposta.text}")
