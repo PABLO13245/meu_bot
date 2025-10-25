@@ -252,8 +252,8 @@ def build_message(fixtures, qty):
 # ==============================
 async def run_analysis_send(qtd):
     now = datetime.utcnow()
-    start_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    start_str = now.strftime("%Y-%m-%d")
+    end_str = (now + timedelta(days=2)).strftime("%Y-%m-%d")
 
     try:
         fixtures = fetch_upcoming_fixtures(API_TOKEN, start_str, end_str)
