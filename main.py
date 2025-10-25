@@ -58,14 +58,13 @@ def fetch_upcoming_fixtures():
     start_str = start.strftime("%Y-%m-%d")
     end_str = end.strftime("%Y-%m-%d")
 
-    url = (
-        f"https://api.sportmonks.com/v3/football/fixtures?"
-        f"api_token={API_TOKEN}"
-        f"&include=participants;league;season"
-        f"&filter[status]=NS"
-        f"&filter[starts_between]={start_str},{end_str}"
-        f"&page=1&per_page=50"
-    )
+    URL = (
+    f"https://api.sportmonks.com/v3/football/fixtures?"
+    f"api_token={API_TOKEN}"
+    f"&include=participants,league,season"
+    f"&filters={{\"status\":\"NS\",\"starts_between\":\"{start_str},{end_str}\"}}"
+    f"&page=1&per_page=50"
+)
 
     print(f"🔍 Buscando partidas entre {start_str} e {end_str}...")
 
