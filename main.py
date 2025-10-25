@@ -62,7 +62,7 @@ def fetch_upcoming_fixtures():
         f"api_token={API_TOKEN}"
         f"&include=participants;league;season"
         f"&filter[status]=NS"
-        f"&filter[starting_at_between]={start_str},{end_str}"
+        f"&filter[starts_between]={start_str},{end_str}"
         f"&page=1&per_page=50"
     )
 
