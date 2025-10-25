@@ -268,8 +268,5 @@ async def main():
         await asyncio.sleep(60)
 
 if __name__ == "__main__":
-    if os.environ.get("TEST_NOW", "0") == "1":
-        print("🚀 Executando teste manual de análise...")
-        asyncio.run(run_analysis_send(3))
-    else:
-        asyncio.run(main())
+    # Executa a função principal manualmente para testar o envio agora
+    asyncio.run(main())
