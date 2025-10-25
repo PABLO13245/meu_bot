@@ -2,9 +2,9 @@ import os
 import requests
 
 # Correto — deve usar o nome da variável que você definiu no Render
-API_TOKEN = os.getenv("poBgEc23XAtTi2BEDIF7MmyY5BRAji5zkB1rAwTlXi1vA0B5NbuKJcLBK4sJ")
-TELEGRAM_TOKEN = os.getenv("8444936746:AAE5JjO5vhrqb-HL7wWr-8kGpOjaCQybmgE")
-CHAT_ID = os.getenv("5245918045")
+API_TOKEN = os.getenv("API_TOKEN")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
 # Verifica se o token foi carregado
 print("Token da API:", "OK" if API_TOKEN else "FALHOU")
