@@ -28,5 +28,5 @@ async def test_real_message():
     except Exception as e:
         print(f"❌ Erro durante o teste: {e}")
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     asyncio.run(test_real_message())
