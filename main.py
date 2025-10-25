@@ -68,7 +68,7 @@ def fetch_upcoming_fixtures():
 
     print(f"🔍 Buscando partidas entre {start_str} e {end_str}...")
 
-    response = requests.get(url)
+    response = requests.get(URL)
     if response.status_code != 200:
         print(f"❌ Erro da API: {response.text}")
         return []
