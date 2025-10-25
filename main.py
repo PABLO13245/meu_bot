@@ -49,17 +49,15 @@ def get_json(endpoint, params=None):
 # BUSCAR PARTIDAS FUTURAS (CORRIGIDO PARA API V3)
 # ===============================
 def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
-    print(f"🔵 Buscando partidas entre {start_str} e {end_str}...")
+    import requests
 
-    url = (
-    f"https://api.sportmonks.com/v3/football/fixtures/between/{start_str}/{end_str}"
-    f"?api_token={API_TOKEN}&include=participants;league;season"
-    f"&statuses[]=NS&per_page=50"
-)
+    print(f"🔍 Buscando partidas entre {start_str} e {end_str}...")
+
+    url = f"https://api.sportmonks.com/v3/football/fixtures/between/{start_str}/{end_str}?api_token={API_TOKEN}"
 
     try:
         response = requests.get(url)
-        print("📡 Status code:", response.status_code)
+        print("🌍 Código de status:", response.status_code)
 
         if response.status_code != 200:
             print("❌ Erro da API:", response.text)
@@ -69,7 +67,7 @@ def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
         return data.get("data", [])
 
     except Exception as e:
-        print(f"❌ Erro na requisição: {e}")
+        print("⚠ Erro ao buscar partidas:", e)
         return None
 
 
