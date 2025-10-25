@@ -214,36 +214,7 @@ def build_message(fixtures, qty):
             home_id = participants[0]["id"]
             away_id = participants[1]["id"]
             kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00")).astimezone(TZ)
-            kickoff_local = kickoff.strftime("%H:%M")
-            # Teste temporário para depuração
-hm = f.get("stats", {}).get("home", {})
-am = f.get("stats", {}).get("away", {})
-print("DEBUG HOME STATS:", hm)
-print("DEBUG AWAY STATS:", am)
-
-# Bandeiras com base no país dos times
-def country_flag_from_name(team):
-    flags = {
-        "ENG": "🏴",
-        "BRA": "🇧🇷",
-        "FRA": "🇫🇷",
-        "ESP": "🇪🇸",
-        "ITA": "🇮🇹",
-        "GER": "🇩🇪",
-        "RUS": "🇷🇺",
-        "UKR": "🇺🇦",
-        "USA": "🇺🇸",
-        "POR": "🇵🇹",
-        "ARG": "🇦🇷",
-        "NED": "🇳🇱",
-        "BEL": "🇧🇪"
-    }
-    code = team.get("country", {}).get("code", "")
-    return flags.get(code, "🏳")
-
-flag_home = country_flag_from_name(participants[0])
-flag_away = country_flag_from_name(participants[1])
-            
+            kickoff_local = kickoff.strftime("%H:%M")   
         except Exception:
             continue
 
