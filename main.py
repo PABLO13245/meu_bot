@@ -53,7 +53,11 @@ def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
 
     print(f"🔍 Buscando partidas entre {start_str} e {end_str}...")
 
-    url = f"https://api.sportmonks.com/v3/football/fixtures/between/{start_str}/{end_str}?api_token={API_TOKEN}"
+    url = (
+    f"https://api.sportmonks.com/v3/football/fixtures/between/{start_str}/{end_str}"
+    f"?api_token={API_TOKEN}"
+    f"&include=participants;participants.country;league;season;statistics"
+)
 
     try:
         response = requests.get(url)
