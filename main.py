@@ -52,10 +52,10 @@ def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
     print(f"🔵 Buscando partidas entre {start_str} e {end_str}...")
 
     url = (
-        f"https://api.sportmonks.com/v3/football/fixtures/between/{start_str}/{end_str}"
-        f"?api_token={API_TOKEN}&include=participants;league;season"
-        f"&filters='status=NS'&per_page=50"
-    )
+    f"https://api.sportmonks.com/v3/football/fixtures/between/{start_str}/{end_str}"
+    f"?api_token={API_TOKEN}&include=participants;league;season"
+    f"&statuses[]=NS&per_page=50"
+)
 
     try:
         response = requests.get(url)
