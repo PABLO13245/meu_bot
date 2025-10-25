@@ -20,7 +20,7 @@ async def test_real_message():
 
         # Ordena as partidas por data de início
         fixtures = sorted(fixtures, key=lambda x: x["starting_at"])
-        message = build_message(fixtures[:3])
+        message = build_message(fixtures[:3], qty=3)
 
         await bot.send_message(CHAT_ID, message)
         print("✅ Mensagem enviada com sucesso!")
