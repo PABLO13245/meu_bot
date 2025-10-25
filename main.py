@@ -8,15 +8,12 @@ import pytz
 from statistics import mean
 
 # CONFIGURAÇÕES
-SPORTMONKS_TOKEN = "API_TOKEN"  # seu token aqui
-BOT_TOKEN = "TELEGRAM_TOKEN"  # se quiser testar sem variável
-CHAT_ID = "CHAT_ID"  # ID do seu chat
+SPORTMONKS_TOKEN = os.getenv("API_TOKEN")  # seu token aqui
+BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")  # se quiser testar sem variável
+CHAT_ID = os.getenv("CHAT_ID")  # ID do seu chat
 TZ = pytz.timezone("America/Sao_Paulo")
 
 BASE_URL = f"https://api.sportmonks.com/v3/football"
-bot = Bot(token=BOT_TOKEN)
-
-BASE_URL = "https://api.sportmonks.com/v3/football"
 bot = Bot(token=BOT_TOKEN)
 
 # ==============================
