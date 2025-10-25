@@ -269,7 +269,7 @@ async def main():
 
 if __name__ == "__main__":
     print("🔍 Teste manual iniciado...")
-    from analise import run_analysis_send
+    from analysis import run_analysis_send
     import asyncio
     asyncio.run(run_analysis_send(3))
     print("✅ Teste manual concluído (verifique seu Telegram!)")
