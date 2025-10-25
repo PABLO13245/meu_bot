@@ -1,22 +1,20 @@
-import requests
-import os
+import asyncio
+from main import fetch_upcoming_fixtures, build_message, bot, CHAT_ID
 
-# Função que simula envio de análise
-async def run_analysis_send(num):
-    print(f"🔍 Rodando análise número {num}...")
+async def test_real_message():
+    print("🚀 Teste real iniciado...")
+    try:
+        fixtures = fetch_upcoming_fixtures()
+        if not fixtures:
+            await bot.send_message(CHAT_ID, "⚠ Nenhuma partida encontrada nas próximas 48h.")
+            return
 
-    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-    CHAT_ID = os.getenv("CHAT_ID")
+        fixtures = sorted(fixtures, key=lambda x: x["starting_at"])
+        message = await asyncio.to_thread(build_message, fixtures, 3)
+        await bot.send_message(CHAT_ID, message, parse_mode="Markdown")
+        print("✅ Mensagem enviada com sucesso!")
+    except Exception as e:
+        print(f"❌ Erro durante o teste: {e}")
 
-    if not TELEGRAM_TOKEN or not CHAT_ID:
-        print("⚠ Variáveis TELEGRAM_TOKEN ou CHAT_ID não definidas.")
-        return
-
-    texto = f"📊 Análise automática número {num} concluída com sucesso!"
-
-    # Envia pro Telegram
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": texto}
-    response = requests.post(url, data=data)
-
-    print("📨 Envio para Telegram:", response.status_code)
+if __name__ == "__main__":
+    asyncio.run(test_real_message())
