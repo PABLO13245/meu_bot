@@ -1,202 +1,29 @@
+# main.py
 import os
 import asyncio
-import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Bot
 import pytz
-from statistics import mean
 
-# ==============================
-# CONFIGURAÇÕES
-# ==============================
-API_TOKEN = os.getenv("API_TOKEN")  # Token da SportMonks (v3)
-BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Token do bot do Telegram
-CHAT_ID = os.getenv("CHAT_ID")  # ID do chat onde as mensagens serão enviadas
-TZ = pytz.timezone("America/Sao_Paulo")
-
-BASE_URL = "https://api.sportmonks.com/v3/football"
-bot = Bot(token=BOT_TOKEN)
-
-# ==============================
-# FUNÇÃO DE REQUISIÇÃO GENÉRICA
-# ==============================
-def get_json(endpoint, params=None):
-    token = API_TOKEN
-    if not token:
-        print("❌ ERRO: Variável de ambiente API_TOKEN não encontrada.")
-        return None
-
-    headers = {"Authorization": f"Bearer {token}"}
-    url = f"{BASE_URL}/{endpoint}"
-
-    print(f"🌐 Requisitando: {url}")
-    try:
-        response = requests.get(url, headers=headers, params=params)
-        print(f"🔢 Status code: {response.status_code}")
-
-        if response.status_code != 200:
-            print(f"⚠ Erro da API: {response.text}")
-            return None
-
-        return response.json()
-    except Exception as e:
-        print(f"❌ Erro na requisição: {e}")
-        return None
-
-
-# ===============================
-# BUSCAR PARTIDAS FUTURAS (CORRIGIDO PARA API V3)
-# ===============================
-def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
-    import requests
-
-    print(f"🔍 Buscando partidas entre {start_str} e {end_str}...")
-
-    url = (
-    f"https://api.sportmonks.com/v3/football/fixtures/between/{start_str}/{end_str}"
-    f"?api_token={API_TOKEN}"
-    f"&include=participants;participants.country;league;season"
+from analysis import (
+    fetch_upcoming_fixtures,
+    compute_team_metrics,
+    decide_best_market,
+    kickoff_time_local
 )
 
-    try:
-        response = requests.get(url)
-        print("🌍 Código de status:", response.status_code)
+# CONFIGURAÇÕES via ENV
+API_TOKEN = os.getenv("API_TOKEN")            # SportMonks token
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Telegram bot token
+CHAT_ID = os.getenv("CHAT_ID")                # chat id (string)
+TZ = pytz.timezone("America/Sao_Paulo")
+bot = Bot(token=TELEGRAM_TOKEN)
 
-        if response.status_code != 200:
-            print("❌ Erro da API:", response.text)
-            return None
+# Quantidade de partidas por envio (você pediu 7)
+TOP_QTY = 7
 
-        data = response.json()
-        return data.get("data", [])
-
-    except Exception as e:
-        print("⚠ Erro ao buscar partidas:", e)
-        return None
-
-
-# ==============================
-# COLETAR DADOS DOS TIMES
-# ==============================
-def fetch_last_matches_for_team(team_id, last=5):
-    params = {
-        "include": "participants;stats",
-        "filter[team_id]": team_id,
-        "filter[status]": "FT",
-        "sort": "-starting_at",
-        "per_page": last
-    }
-    data = get_json("fixtures", params)
-    return data["data"] if data and "data" in data else []
-
-
-def compute_team_metrics(team_id):
-    matches = fetch_last_matches_for_team(team_id, last=5)
-    goals_for, goals_against, corners_for = [], [], []
-    wins = 0
-
-    for m in matches:
-        try:
-            home = m["participants"][0]
-            away = m["participants"][1]
-            home_id = home["id"]
-            away_id = away["id"]
-            g_home = int(home.get("meta", {}).get("score", 0))
-            g_away = int(away.get("meta", {}).get("score", 0))
-        except Exception:
-            continue
-
-        if g_home is None or g_away is None:
-            continue
-
-        if str(home_id) == str(team_id):
-            goals_for.append(g_home)
-            goals_against.append(g_away)
-            if g_home > g_away:
-                wins += 1
-        else:
-            goals_for.append(g_away)
-            goals_against.append(g_home)
-            if g_away > g_home:
-                wins += 1
-
-        stats = m.get("stats", [])
-        for s in stats:
-            if str(s.get("team_id")) == str(team_id):
-                corners = s.get("corners", 0)
-                if corners:
-                    corners_for.append(int(corners))
-
-    avg_for = mean(goals_for) if goals_for else 0.0
-    avg_against = mean(goals_against) if goals_against else 0.0
-    avg_corners = mean(corners_for) if corners_for else 0.0
-    win_rate = wins / len(matches) if matches else 0.0
-
-    return {
-        "avg_goals_for": avg_for,
-        "avg_goals_against": avg_against,
-        "avg_corners": avg_corners,
-        "win_rate": win_rate,
-    }
-
-
-# ==============================
-# DECISÃO DAS APOSTAS
-# ==============================
-def decide_suggestion(home_metrics, away_metrics):
-    goals_sum = home_metrics["avg_goals_for"] + away_metrics["avg_goals_for"]
-    corners_sum = home_metrics["avg_corners"] + away_metrics["avg_corners"]
-    win_delta = home_metrics["win_rate"] - away_metrics["win_rate"]
-
-    suggestions = []
-    if goals_sum >= 2.8:
-        suggestions.append("+2.5 Gols")
-    elif goals_sum >= 2.0:
-        suggestions.append("+1.5 Gols")
-
-    if home_metrics["avg_goals_for"] >= 1.1 and away_metrics["avg_goals_for"] >= 1.1:
-        suggestions.append("Ambas Marcam")
-
-    if corners_sum >= 9:
-        suggestions.append("+8.5 Escanteios")
-    elif corners_sum >= 7:
-        suggestions.append("+7.5 Escanteios")
-
-    if win_delta >= 0.35:
-        suggestions.append("Vitória provável do Mandante")
-    elif win_delta <= -0.35:
-        suggestions.append("Vitória provável do Visitante")
-
-    conf = 0
-    conf += max(0, win_delta) * 50
-    conf += min(30, (goals_sum / 4) * 30)
-    conf += min(20, (corners_sum / 15) * 20)
-    confidence = min(98, round(abs(conf)))
-
-    if not suggestions:
-        suggestions.append("Sem sinal forte — evite aposta arriscada")
-
-    return suggestions, confidence
-
-
-# ==============================
-# GERAR MENSAGEM
-# ==============================
-def country_flag_from_name(name):
-    mapping = {
-        "brazil": "🇧🇷", "england": "🏴", "spain": "🇪🇸", "france": "🇫🇷",
-        "germany": "🇩🇪", "italy": "🇮🇹", "portugal": "🇵🇹", "argentina": "🇦🇷",
-        "usa": "🇺🇸", "japan": "🇯🇵", "mexico": "🇲🇽", "netherlands": "🇳🇱",
-        "turkey": "🇹🇷", "chile": "🇨🇱", "uruguay": "🇺🇾"
-    }
-    low = name.lower()
-    for k, v in mapping.items():
-        if k in low:
-            return v
-    return "⚽"
-
-
-def build_message(fixtures, qty):
+def build_message(fixtures, api_token, qty=7):
     now = datetime.now(TZ)
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
@@ -205,84 +32,103 @@ def build_message(fixtures, qty):
     )
     lines = [header]
 
-    for idx, f in enumerate(fixtures[:qty], start=1):
-        try:
-            participants = f["participants"]
-            home = participants[0]["name"]
-            away = participants[1]["name"]
-            league = f.get("league", {}).get("name", "Desconhecida")
-            home_id = participants[0]["id"]
-            away_id = participants[1]["id"]
-            kickoff = datetime.fromisoformat(f["starting_at"].replace("Z", "+00:00")).astimezone(TZ)
-            kickoff_local = kickoff.strftime("%H:%M")   
-        except Exception:
+    count = 0
+    for idx, f in enumerate(fixtures, start=1):
+        if count >= qty:
+            break
+        participants = f.get("participants", [])
+        if len(participants) < 2:
             continue
+        home = participants[0].get("name", "Casa")
+        away = participants[1].get("name", "Fora")
+        league = f.get("league", {}).get("name", "Desconhecida")
+        home_id = participants[0].get("id")
+        away_id = participants[1].get("id")
+        kickoff_local = kickoff_time_local(f, TZ)
 
-        hm = compute_team_metrics(home_id)
-        am = compute_team_metrics(away_id)
-        suggestions, confidence = decide_suggestion(hm, am)
-        flag_home, flag_away = country_flag_from_name(home), country_flag_from_name(away)
+        # calcula métricas
+        hm = compute_team_metrics(api_token, home_id, last=5)
+        am = compute_team_metrics(api_token, away_id, last=5)
+
+        # decide a melhor aposta
+        suggestion, confidence = decide_best_market(hm, am)
 
         part = (
-            f"{idx}. {flag_home} {home} x {away} {flag_away}\n"
+            f"{idx}. ⚽ {home} x {away}\n"
             f"🏆 {league}  •  🕒 {kickoff_local}\n"
-            f"📊 Gols médios: {hm['avg_goals_for']:.2f} / {am['avg_goals_for']:.2f}\n"
-            f"🔁 Escanteios médios: {hm['avg_corners']:.2f} / {am['avg_corners']:.2f}\n"
-            f"📈 Win rate: {hm['win_rate']*100:.1f}% / {am['win_rate']*100:.1f}%\n"
-            f"🎯 Sugestões: {', '.join(suggestions)}\n"
+            f"🎯 Sugestão principal: {suggestion}\n"
             f"💹 Confiança: {confidence}%\n"
             "──────────────────────────────\n"
         )
         lines.append(part)
+        count += 1
 
-    footer = (
-        "\n🔎 Obs: baseado nos últimos 5 jogos; escanteios podem estar incompletos.\n"
-        "Use análise responsável."
-    )
+    if count == 0:
+        lines.append("⚠ Nenhuma partida encontrada para análise nas próximas 48h.\n")
+
+    footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
+    # return single string (Markdown)
     return "\n".join(lines)
 
-
-# ==============================
-# EXECUÇÃO AUTOMÁTICA (AGENDADOR)
-# ==============================
-async def run_analysis_send(qtd):
-    now = datetime.utcnow()
+async def run_analysis_send(qtd=TOP_QTY):
+    # build date range: next 48h (SportMonks accepts YYYY-MM-DD for between)
+    now = datetime.now(timezone.utc)
     start_str = now.strftime("%Y-%m-%d")
-    end_str = (now + timedelta(days=2)).strftime("%Y-%m-%d")
+    end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%d")
 
     try:
-        fixtures = fetch_upcoming_fixtures(API_TOKEN, start_str, end_str)
+        fixtures = fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=100)
         if not fixtures:
-            await bot.send_message(CHAT_ID, "⚠ Nenhuma partida encontrada nas próximas 48h.")
+            await bot.send_message(chat_id=CHAT_ID, text="⚠ Nenhuma partida encontrada nas próximas 48h.")
             return
-
-        fixtures = sorted(fixtures, key=lambda x: x["starting_at"])
-        message = await asyncio.to_thread(build_message, fixtures, qtd)
-        await bot.send_message(CHAT_ID, message, parse_mode="Markdown")
-
+        # sort by starting_at
+        fixtures = sorted(fixtures, key=lambda x: x.get("starting_at", ""))
+        message = await asyncio.to_thread(build_message, fixtures, API_TOKEN, qtd)
+        await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
     except Exception as e:
-        await bot.send_message(CHAT_ID, f"❌ Erro na análise: {e}")
-
+        # log and send minimal error
+        print("Erro run_analysis_send:", e)
+        try:
+            await bot.send_message(chat_id=CHAT_ID, text=f"❌ Erro na análise: {e}")
+        except Exception:
+            pass
 
 def start_scheduler():
     scheduler = AsyncIOScheduler(timezone=TZ)
-    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(3)), "cron", hour=6, minute=0)
-    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(3)), "cron", hour=15, minute=0)
-    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(3)), "cron", hour=19, minute=0)
+    # 06:00, 16:00, 19:00 BRT
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=6, minute=0)
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=16, minute=0)
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0)
     scheduler.start()
-    print("🕒 Agendador ativo: 06:00, 15:00, 19:00 BRT")
-
+    print("Scheduler started: 06:00, 16:00, 19:00 BRT")
 
 async def main():
     start_scheduler()
-    print("🚀 Bot iniciado e rodando continuamente...")
+    # test-on-start support
+    if os.getenv("TEST_NOW", "0") == "1":
+        print("TEST_NOW=1 -> enviando teste imediato")
+        await run_analysis_send(TOP_QTY)
+    # keep alive
     while True:
         await asyncio.sleep(60)
 
-
 if __name__ == "__main__":
+    # quick check for env variables
+    missing = []
+    if not API_TOKEN:
+        missing.append("API_TOKEN")
+    if not TELEGRAM_TOKEN:
+        missing.append("TELEGRAM_TOKEN")
+    if not CHAT_ID:
+        missing.append("CHAT_ID")
+    if missing:
+        print("⚠ Variáveis de ambiente ausentes:", missing)
+        print("Defina-as antes de rodar. Exemplo (bash):")
+        print(' export API_TOKEN="seu_token"')
+        print(' export TELEGRAM_TOKEN="seu_telegram_token"')
+        print(' export CHAT_ID="sua_chat_id"')
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("🛑 Bot interrompido manualmente.")
+        print("Bot interrompido manualmente.")
