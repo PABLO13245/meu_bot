@@ -45,9 +45,9 @@ def get_json(endpoint, params=None):
         return None
 
 
-# ==============================
-# BUSCAR PARTIDAS FUTURAS (CORRIGIDO PARA API v3)
-# ==============================
+# ===============================
+# BUSCAR PARTIDAS FUTURAS (CORRIGIDO PARA API V3)
+# ===============================
 def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
     import requests
 
@@ -61,22 +61,26 @@ def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
     )
 
     print(f"🔵 Buscando partidas entre {start_str} e {end_str}...")
+
     try:
-        resposta = requests.get(url)
-        print(f"🔹 Status code: {resposta.status_code}")
+        response = requests.get(url)
+        print("🔹 Código de status:", response.status_code)
+        data = response.json()
 
-        if resposta.status_code != 200:
-            print(f"❌ Erro da API: {resposta.text}")
-            return []
+        if response.status_code != 200:
+            print("❌ Erro na requisição:", data)
+            return None
 
-        dados = resposta.json()
-        fixtures = dados.get("data", [])
+        # ✅ Extrai apenas partidas válidas
+        fixtures = data.get("data", [])
+        fixtures = [f for f in fixtures if f.get("status") == "NS"]
+
         print(f"✅ {len(fixtures)} partidas encontradas com status 'NS'.")
         return fixtures
 
     except Exception as e:
-        print(f"❌ Erro durante a requisição: {e}")
-        return []
+        print(f"❌ Erro ao buscar partidas: {e}")
+        return None
 
 
 # ==============================
