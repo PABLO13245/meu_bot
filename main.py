@@ -267,9 +267,9 @@ async def main():
     while True:
         await asyncio.sleep(60)
 
-if __name__ == "__main__":
-    print("🔍 Teste manual iniciado...")
-    from analysis import run_analysis_send
-    import asyncio
-    asyncio.run(run_analysis_send(3))
-    print("✅ Teste manual concluído (verifique seu Telegram!)")
+#if __name__ == "__main__":
+#    print("🔍 Teste manual iniciado...")
+#    from analysis import run_analysis_send
+#    import asyncio
+#   asyncio.run(run_analysis_send(3))
+#    print("✅ Teste manual concluído (verifique seu Telegram!)")
