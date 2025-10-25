@@ -48,8 +48,6 @@ def get_json(endpoint, params=None):
 # ==============================
 # BUSCAR PARTIDAS FUTURAS (CORRIGIDO)
 # ==============================
-import requests
-
 def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
     import requests
 
