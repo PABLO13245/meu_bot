@@ -56,7 +56,7 @@ def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
     url = (
     f"https://api.sportmonks.com/v3/football/fixtures/between/{start_str}/{end_str}"
     f"?api_token={API_TOKEN}"
-    f"&include=participants;participants.country;league;season;statistics"
+    f"&include=participants;participants.country;league;season"
 )
 
     try:
