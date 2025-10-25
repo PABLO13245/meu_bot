@@ -1,7 +1,7 @@
 import os
 import asyncio
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Bot
 import pytz
@@ -44,21 +44,29 @@ def get_json(endpoint, params=None):
         print(f"❌ Erro na requisição: {e}")
         return None
 
-# ==============================
-# BUSCAR PARTIDAS FUTURAS
-# ==============================
-def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
-    url = (
-        "https://api.sportmonks.com/v3/football/fixtures"
-        f"?api_token={API_TOKEN}"
-        "&include=participants;league;season"
-        f"&filters={{\"status\":\"NS\",\"starts_between\":[\"{start_str}\",\"{end_str}\"]}}"
-        "&page=1&per_page=50"
-    )
 
+# ==============================
+# BUSCAR PARTIDAS FUTURAS (CORRIGIDO)
+# ==============================
+def fetch_upcoming_fixtures(api_token, start_str, end_str):
+    """
+    Busca partidas futuras (status NS) com a API v3.
+    Corrigido: usa header Authorization e parâmetros válidos da API nova.
+    """
+    headers = {"Authorization": f"Bearer {api_token}"}
+    params = {
+        "include": "participants;league;season",
+        "filter[status]": "NS",
+        "filter[starts_between]": f"{start_str},{end_str}",
+        "page": 1,
+        "per_page": 50
+    }
+
+    url = f"{BASE_URL}/fixtures"
     print(f"🔵 Buscando partidas entre {start_str} e {end_str}...")
+
     try:
-        resposta = requests.get(url)
+        resposta = requests.get(url, headers=headers, params=params)
         if resposta.status_code != 200:
             print(f"❌ Erro da API: {resposta.text}")
             return []
@@ -72,19 +80,21 @@ def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
         print(f"❌ Erro durante a requisição: {e}")
         return []
 
+
 # ==============================
 # COLETAR DADOS DOS TIMES
 # ==============================
 def fetch_last_matches_for_team(team_id, last=5):
     params = {
         "include": "participants;stats",
-        "filters[team_id]": team_id,
-        "filters[status]": "FT",
+        "filter[team_id]": team_id,
+        "filter[status]": "FT",
         "sort": "-starting_at",
         "per_page": last
     }
     data = get_json("fixtures", params)
     return data["data"] if data and "data" in data else []
+
 
 def compute_team_metrics(team_id):
     matches = fetch_last_matches_for_team(team_id, last=5)
@@ -135,6 +145,7 @@ def compute_team_metrics(team_id):
         "win_rate": win_rate,
     }
 
+
 # ==============================
 # DECISÃO DAS APOSTAS
 # ==============================
@@ -173,6 +184,7 @@ def decide_suggestion(home_metrics, away_metrics):
 
     return suggestions, confidence
 
+
 # ==============================
 # GERAR MENSAGEM
 # ==============================
@@ -188,6 +200,7 @@ def country_flag_from_name(name):
         if k in low:
             return v
     return "⚽"
+
 
 def build_message(fixtures, qty):
     now = datetime.now(TZ)
@@ -235,11 +248,11 @@ def build_message(fixtures, qty):
     lines.append(footer)
     return "\n".join(lines)
 
+
 # ==============================
 # EXECUÇÃO AUTOMÁTICA (AGENDADOR)
 # ==============================
 async def run_analysis_send(qtd):
-    from datetime import timedelta
     now = datetime.utcnow()
     start_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -257,6 +270,7 @@ async def run_analysis_send(qtd):
     except Exception as e:
         await bot.send_message(CHAT_ID, f"❌ Erro na análise: {e}")
 
+
 def start_scheduler():
     scheduler = AsyncIOScheduler(timezone=TZ)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(3)), "cron", hour=6, minute=0)
@@ -265,11 +279,13 @@ def start_scheduler():
     scheduler.start()
     print("🕒 Agendador ativo: 06:00, 15:00, 19:00 BRT")
 
+
 async def main():
     start_scheduler()
     print("🚀 Bot iniciado e rodando continuamente...")
     while True:
         await asyncio.sleep(60)
+
 
 if __name__ == "__main__":
     try:
