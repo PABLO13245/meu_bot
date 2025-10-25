@@ -10,7 +10,7 @@ async def test_real_message():
 
     try:
         # ✅ Chamada correta da função (API_TOKEN, start_str, end_str)
-        fixtures = fetch_upcoming_fixtures(API_TOKEN, start_str, end_str)
+        fixtures = await asyncio.to_thread(fetch_upcoming_fixtures, API_TOKEN, start_str, end_str)
 
         if not fixtures:
             await bot.send_message(CHAT_ID, "⚠ Nenhuma partida encontrada nas próximas 48h.")
