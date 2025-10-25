@@ -46,42 +46,39 @@ def get_json(endpoint, params=None):
         print(f"❌ Erro na requisição: {e}")
         return None
 
-# 🏆 COLETA DE PARTIDAS (versão funcional e testada)
-def fetch_upcoming_fixtures():
-    import requests
-    from datetime import datetime, timedelta, timezone
+import requests
 
-    API_TOKEN = "poBgEc23XAtTi2BEDIF7MmyY5BRAji5zkB1rAwTlXi1vA0B5NbuKJcLBK4sJ"  # seu token real aqui
-
-    start = datetime.now(timezone.utc)
-    end = start + timedelta(days=3)  # buscar próximos 3 dias
-    start_str = start.strftime("%Y-%m-%d")
-    end_str = end.strftime("%Y-%m-%d")
+def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
+    """
+    Busca partidas futuras (não iniciadas) na API SportMonks
+    dentro do intervalo entre start_str e end_str.
+    """
 
     URL = (
-    f"https://api.sportmonks.com/v3/football/fixtures?"
-    f"api_token={API_TOKEN}"
-    f"&include=participants,league,season"
-    f"&filters={{\"status\":\"NS\",\"starts_between\":\"{start_str},{end_str}\"}}"
-    f"&page=1&per_page=50"
-)
+        "https://api.sportmonks.com/v3/football/fixtures"
+        f"?api_token={API_TOKEN}"
+        "&include=participants;league;season"
+        f"&filters={{\"status\":\"NS\",\"starts_between\":[\"{start_str}\",\"{end_str}\"]}}"
+        "&page=1&per_page=50"
+    )
 
-    print(f"🔍 Buscando partidas entre {start_str} e {end_str}...")
+    print(f"🔵 Buscando partidas entre {start_str} e {end_str}...")
 
-    response = requests.get(URL)
-    if response.status_code != 200:
-        print(f"❌ Erro da API: {response.text}")
+    try:
+        resposta = requests.get(URL)
+        if resposta.status_code != 200:
+            print(f"❌ Erro da API: {resposta.text}")
+            return []
+
+        dados = resposta.json()
+        fixtures = dados.get("data", [])
+
+        print(f"✅ {len(fixtures)} partidas encontradas com status 'NS'.")
+        return fixtures
+
+    except Exception as e:
+        print(f"❌ Erro durante a requisição: {e}")
         return []
-
-    data = response.json()
-    fixtures = data.get("data", [])
-    print(f"✅ {len(fixtures)} partidas encontradas com status 'NS' (Not Started).")
-
-    for f in fixtures[:5]:
-        teams = [p["name"] for p in f.get("participants", [])]
-        print(f"⚽ {f['id']} | {' x '.join(teams)}")
-
-    return fixtures
 
 # ==============================
 # RESTANTE DO SEU CÓDIGO (SEM MUDANÇAS)
