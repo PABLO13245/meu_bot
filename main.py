@@ -46,12 +46,13 @@ def get_json(endpoint, params=None):
         print(f"❌ Erro na requisição: {e}")
         return None
 
-# 🧩 COLETA DE PARTIDAS (versão funcional)
+# 🏆 COLETA DE PARTIDAS (versão funcional e testada)
 def fetch_upcoming_fixtures():
     import requests
     from datetime import datetime, timedelta, timezone
 
-    API_TOKEN = "poBgEc23XAtTi2BEDIF7MmyY5BRAji5zkB1rAwTlXi1vA0B5NbuKJcLBK4sJ"  # substitua pelo seu token real
+    API_TOKEN = "poBgEc23XAtTi2BEDIF7MmyY5BRAji5zkB1rAwTlXi1vA0B5NbuKJcLBK4sJ"  # seu token real aqui
+
     start = datetime.now(timezone.utc)
     end = start + timedelta(days=3)  # buscar próximos 3 dias
     start_str = start.strftime("%Y-%m-%d")
@@ -69,7 +70,6 @@ def fetch_upcoming_fixtures():
     print(f"🔍 Buscando partidas entre {start_str} e {end_str}...")
 
     response = requests.get(url)
-
     if response.status_code != 200:
         print(f"❌ Erro da API: {response.text}")
         return []
@@ -78,7 +78,6 @@ def fetch_upcoming_fixtures():
     fixtures = data.get("data", [])
     print(f"✅ {len(fixtures)} partidas encontradas com status 'NS' (Not Started).")
 
-    # Mostrar 5 primeiras partidas
     for f in fixtures[:5]:
         teams = [p["name"] for p in f.get("participants", [])]
         print(f"⚽ {f['id']} | {' x '.join(teams)}")
