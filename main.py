@@ -51,12 +51,12 @@ def get_json(endpoint, params=None):
 def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
     import requests
 
-    # ✅ Endpoint atualizado para SportMonks v3
+    # ✅ Endpoint correto da API SportMonks v3
     url = (
         f"https://api.sportmonks.com/v3/football/fixtures/between/{start_str}/{end_str}"
         f"?api_token={API_TOKEN}"
         "&include=participants;league;season"
-        "&filters=status:NS"
+        "&filters[status]=NS"
         "&per_page=50"
     )
 
