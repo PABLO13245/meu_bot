@@ -268,12 +268,8 @@ async def main():
         await asyncio.sleep(60)
 
 if __name__ == "__main__":
-    # Executa a função principal manualmente para testar o envio agora
-    asyncio.run(main())
-# Teste manual: enviar análise agora
-    import asyncio
-    from analysis import run_analysis_send  # se esse for o nome da função que envia os jogos
-
     print("🔍 Teste manual iniciado...")
-    asyncio.run(run_analysis_send(3))  # envia o mesmo tipo de mensagem que o agendador
-    print("✅ Teste manual concluído (verifique seu Telegram)")
+    from analysis import run_analysis_send
+    import asyncio
+    asyncio.run(run_analysis_send(3))
+    print("✅ Teste manual concluído (verifique seu Telegram!)")
