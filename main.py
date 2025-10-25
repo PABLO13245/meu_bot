@@ -1,34 +1,34 @@
 import os
 import asyncio
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Bot
 import pytz
 from statistics import mean
 
+# ==============================
 # CONFIGURAÇÕES
-SPORTMONKS_TOKEN = os.getenv("API_TOKEN")  # seu token aqui
-BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")  # se quiser testar sem variável
-CHAT_ID = os.getenv("CHAT_ID")  # ID do seu chat
+# ==============================
+API_TOKEN = os.getenv("API_TOKEN")  # Token da SportMonks
+BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Token do seu bot do Telegram
+CHAT_ID = os.getenv("CHAT_ID")  # ID do chat onde vai enviar as mensagens
 TZ = pytz.timezone("America/Sao_Paulo")
 
-BASE_URL = f"https://api.sportmonks.com/v3/football"
+BASE_URL = "https://api.sportmonks.com/v3/football"
 bot = Bot(token=BOT_TOKEN)
 
 # ==============================
-# FUNÇÃO DE REQUISIÇÃO
+# FUNÇÃO DE REQUISIÇÃO GENÉRICA
 # ==============================
 def get_json(endpoint, params=None):
-    base_url = "https://api.sportmonks.com/v3/"
-    token = os.getenv("SPORTMONKS_TOKEN")
-
+    token = API_TOKEN
     if not token:
-        print("❌ ERRO: Variável de ambiente SPORTMONKS_TOKEN não encontrada.")
+        print("❌ ERRO: Variável de ambiente API_TOKEN não encontrada.")
         return None
 
     headers = {"Authorization": f"Bearer {token}"}
-    url = f"{base_url}{endpoint}"
+    url = f"{BASE_URL}/{endpoint}"
 
     print(f"🌐 Requisitando: {url}")
     try:
@@ -39,22 +39,16 @@ def get_json(endpoint, params=None):
             print(f"⚠ Erro da API: {response.text}")
             return None
 
-        data = response.json()
-        return data
-
+        return response.json()
     except Exception as e:
         print(f"❌ Erro na requisição: {e}")
         return None
 
-import requests
-
+# ==============================
+# BUSCAR PARTIDAS FUTURAS
+# ==============================
 def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
-    """
-    Busca partidas futuras (não iniciadas) na API SportMonks
-    dentro do intervalo entre start_str e end_str.
-    """
-
-    URL = (
+    url = (
         "https://api.sportmonks.com/v3/football/fixtures"
         f"?api_token={API_TOKEN}"
         "&include=participants;league;season"
@@ -63,16 +57,14 @@ def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
     )
 
     print(f"🔵 Buscando partidas entre {start_str} e {end_str}...")
-
     try:
-        resposta = requests.get(URL)
+        resposta = requests.get(url)
         if resposta.status_code != 200:
             print(f"❌ Erro da API: {resposta.text}")
             return []
 
         dados = resposta.json()
         fixtures = dados.get("data", [])
-
         print(f"✅ {len(fixtures)} partidas encontradas com status 'NS'.")
         return fixtures
 
@@ -81,7 +73,7 @@ def fetch_upcoming_fixtures(API_TOKEN, start_str, end_str):
         return []
 
 # ==============================
-# RESTANTE DO SEU CÓDIGO (SEM MUDANÇAS)
+# COLETAR DADOS DOS TIMES
 # ==============================
 def fetch_last_matches_for_team(team_id, last=5):
     params = {
@@ -143,6 +135,9 @@ def compute_team_metrics(team_id):
         "win_rate": win_rate,
     }
 
+# ==============================
+# DECISÃO DAS APOSTAS
+# ==============================
 def decide_suggestion(home_metrics, away_metrics):
     goals_sum = home_metrics["avg_goals_for"] + away_metrics["avg_goals_for"]
     corners_sum = home_metrics["avg_corners"] + away_metrics["avg_corners"]
@@ -178,6 +173,9 @@ def decide_suggestion(home_metrics, away_metrics):
 
     return suggestions, confidence
 
+# ==============================
+# GERAR MENSAGEM
+# ==============================
 def country_flag_from_name(name):
     mapping = {
         "brazil": "🇧🇷", "england": "🏴", "spain": "🇪🇸", "france": "🇫🇷",
@@ -237,15 +235,25 @@ def build_message(fixtures, qty):
     lines.append(footer)
     return "\n".join(lines)
 
+# ==============================
+# EXECUÇÃO AUTOMÁTICA (AGENDADOR)
+# ==============================
 async def run_analysis_send(qtd):
+    from datetime import timedelta
+    now = datetime.utcnow()
+    start_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     try:
-        fixtures = fetch_upcoming_fixtures()
+        fixtures = fetch_upcoming_fixtures(API_TOKEN, start_str, end_str)
         if not fixtures:
             await bot.send_message(CHAT_ID, "⚠ Nenhuma partida encontrada nas próximas 48h.")
             return
+
         fixtures = sorted(fixtures, key=lambda x: x["starting_at"])
         message = await asyncio.to_thread(build_message, fixtures, qtd)
         await bot.send_message(CHAT_ID, message, parse_mode="Markdown")
+
     except Exception as e:
         await bot.send_message(CHAT_ID, f"❌ Erro na análise: {e}")
 
@@ -255,16 +263,16 @@ def start_scheduler():
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(3)), "cron", hour=15, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(3)), "cron", hour=19, minute=0)
     scheduler.start()
-    print("Agendador ativo: 06:00, 15:00, 19:00 BRT")
+    print("🕒 Agendador ativo: 06:00, 15:00, 19:00 BRT")
 
 async def main():
     start_scheduler()
+    print("🚀 Bot iniciado e rodando continuamente...")
     while True:
         await asyncio.sleep(60)
 
-import time
-
 if __name__ == "__main__":
-    print("🚀 Bot iniciado e rodando continuamente...")
-    while True:
-        time.sleep(60)  # mantém o script vivo (1 minuto por ciclo)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("🛑 Bot interrompido manualmente.")
