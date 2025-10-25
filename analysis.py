@@ -4,7 +4,7 @@ from main import fetch_upcoming_fixtures, build_message, bot, CHAT_ID
 async def test_real_message():
     print("🚀 Teste real iniciado...")
     try:
-        fixtures = fetch_upcoming_fixtures()
+        dados = fetch_upcoming_fixtures(API_TOKEN, start_str, end_str)
         if not fixtures:
             await bot.send_message(CHAT_ID, "⚠ Nenhuma partida encontrada nas próximas 48h.")
             return
