@@ -106,10 +106,12 @@ async def compute_team_metrics(api_token, team_id, last=5):
                     wins += 1
         except Exception:
             continue
-    avg_for = mean(goals_for) if goals_for else 0.0
-    avg_against = mean(goals_against) if goals_against else 0.0
-    win_rate = wins / len(matches) if matches else 0.0
-    confidence = min(int(win_rate * 100 + avg_for * 10), 99)  # confiança dinâmica
+    if not matches or not goals_for:
+        return None  # sem dados confiáveis
+    avg_for = mean(goals_for)
+    avg_against = mean(goals_against)
+    win_rate = wins / len(matches)
+    confidence = min(int(win_rate * 100 + avg_for * 10), 99)
     return {
         "avg_goals_for": avg_for,
         "avg_goals_against": avg_against,
@@ -121,6 +123,9 @@ async def compute_team_metrics(api_token, team_id, last=5):
 # DECIDIR MELHOR MERCADO
 # ===================================
 def decide_best_market(home_metrics, away_metrics):
+    if not home_metrics or not away_metrics:
+        return "Indefinido", 0
+
     goals_sum = home_metrics["avg_goals_for"] + away_metrics["avg_goals_for"]
     win_diff = home_metrics["win_rate"] - away_metrics["win_rate"]
 
