@@ -7,26 +7,27 @@ import random
 BASE_URL = "https://api.sportmonks.com/v3/football"
 TZ = pytz.timezone("America/Sao_Paulo")
 
-# Adicione os IDs das ligas que você deseja filtrar aqui, separados por vírgula.
-# Ex: Brasileirão (24), Premier League (2), La Liga (5).
-LEAGUE_IDS = "" 
+# IMPORTANTE: LEAGUE_IDS agora é None. Ele será definido e passado
+# pelo main.py para cada análise individual.
+LEAGUE_IDS = None 
 
 # ===================================
 # BUSCAR PARTIDAS FUTURAS
 # ===================================
-async def fetch_upcoming_fixtures(api_token, start_str, end_str):
-    # ATENÇÃO: Adiciona o filtro '&states=1' para buscar apenas jogos AGENDADOS
+# A função agora aceita 'league_ids' como um argumento (que virá do main.py)
+async def fetch_upcoming_fixtures(api_token, start_str, end_str, league_ids=None):
+    # CORREÇÃO CRÍTICA: Adiciona o filtro '&states=1' para buscar apenas jogos AGENDADOS
     url = (
         f"{BASE_URL}/fixtures/between/{start_str}/{end_str}"
         f"?api_token={api_token}"
         f"&include=participants;league;season"
         f"&per_page=200"
-        f"&states=1"  # <--- CORREÇÃO CRÍTICA PARA IGNORAR JOGOS FINALIZADOS (state_id 5)
+        f"&states=1"
     )
     
-    # Adiciona o filtro de ligas, se a lista não estiver vazia
-    if LEAGUE_IDS:
-        url += f"&leagues={LEAGUE_IDS}"
+    # Adiciona o filtro de ligas (agora vindo do argumento da função)
+    if league_ids:
+        url += f"&leagues={league_ids}"
         
     try:
         async with aiohttp.ClientSession() as session:
@@ -41,10 +42,9 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                 # CORREÇÃO FINAL: Define 'now' como aware (UTC)
                 now_aware_utc = datetime.now(timezone.utc)
                 
-                # PRINTS DE DEBUG TEMPORÁRIOS PARA DIAGNÓSTICO:
+                # PRINTS DE DEBUG (Mantidos para diagnóstico se o problema de 0 persistir)
                 print(f"DEBUG: Horário de Execução (UTC): {now_aware_utc.strftime('%Y-%m-%d %H:%M:%S')}")
                 if data:
-                    # Este print será crucial para ver a nova data mais distante
                     print(f"DEBUG: Primeiro Jogo Encontrado na API: {data[0].get('starting_at')}")
                     print(f"DEBUG: Jogos totais recebidos da API (com states=1): {len(data)}")
                 else:
@@ -79,7 +79,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
 # MÉTRICAS DO TIME (Simuladas)
 # ===================================
 async def compute_team_metrics(api_token, team_id, last=2):
-    # *IMPORTANTE:* Esta função continua GERANDO DADOS ALEATÓRIOS para a confiança.
+    # Esta função continua GERANDO DADOS ALEATÓRIOS (Simulação)
     goals_for_avg = random.uniform(0.8, 1.8)
     goals_against_avg = random.uniform(0.8, 1.8)
     win_rate = random.uniform(0.3, 0.7)
@@ -117,7 +117,7 @@ def decide_best_market(home_metrics, away_metrics):
     elif win_diff <= -0.35:
         options.append(("🏆 Vitória do Visitante", "yellow"))
 
-    # Escanteios (Simulado, pois não usa métricas reais)
+    # Escanteios (Simulado)
     options.append(("⚡ Mais de 8 Escanteios", "purple"))
 
     suggestion, color = random.choice(options) 
