@@ -46,10 +46,6 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         am = await compute_team_metrics(api_token, away_id)
         suggestion, confidence = decide_best_market(hm, am)
 
-        # Ignora apenas partidas sem dados
-        if hm is None or am is None:
-            continue
-
         part = (
             f"{count+1}. ⚽ {home} x {away}\n"
             f"🏆 {f.get('league', {}).get('name', 'Desconhecida')}  •  🕒 {kickoff_local}\n"
@@ -68,7 +64,7 @@ async def run_analysis_send(qtd=TOP_QTY):
     start_str = now.strftime("%Y-%m-%d")
     end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%d")
     try:
-        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=100)
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=200)
         fixtures = sorted(fixtures, key=lambda x: x.get("starting_at", ""))
         message = await build_message(fixtures, API_TOKEN, qtd)
         await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
@@ -91,7 +87,7 @@ async def main():
     start_scheduler()
     if os.getenv("TEST_NOW", "0") == "1":
         await run_analysis_send(TOP_QTY)
-    await asyncio.Event().wait()
+    await asyncio.Event().wait()  # mantém o bot ativo
 
 if __name__ == "__main__":
     missing = []
