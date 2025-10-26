@@ -8,6 +8,17 @@ from statistics import mean
 BASE_URL = "https://api.sportmonks.com/v3/football"
 TZ = pytz.timezone("America/Sao_Paulo")
 
+# Ligas confiáveis
+RELIABLE_LEAGUES = [
+    "Premier League",
+    "La Liga",
+    "Bundesliga",
+    "Serie A",
+    "Ligue 1",
+    "Eredivisie",
+    "Primeira Liga"
+]
+
 # ===================================
 # BUSCAR PARTIDAS FUTURAS
 # ===================================
@@ -32,7 +43,8 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100):
                         start_time = datetime.fromisoformat(
                             f["starting_at"].replace("Z", "+00:00")
                         ).astimezone(TZ)
-                        if start_time > now:
+                        league_name = f.get("league", {}).get("name", "Desconhecida")
+                        if start_time > now and league_name in RELIABLE_LEAGUES:
                             upcoming.append(f)
                     except Exception:
                         continue
@@ -76,8 +88,12 @@ async def compute_team_metrics(api_token, team_id, last=5):
             away = participants[1]
             home_id = home.get("id")
             away_id = away.get("id")
-            g_home = int(home.get("meta", {}).get("score", 0))
-            g_away = int(away.get("meta", {}).get("score", 0))
+            g_home = home.get("meta", {}).get("score")
+            g_away = away.get("meta", {}).get("score")
+            if g_home is None or g_away is None:
+                continue
+            g_home = int(g_home)
+            g_away = int(g_away)
             if str(home_id) == str(team_id):
                 goals_for.append(g_home)
                 goals_against.append(g_away)
@@ -93,7 +109,7 @@ async def compute_team_metrics(api_token, team_id, last=5):
     avg_for = mean(goals_for) if goals_for else 0.0
     avg_against = mean(goals_against) if goals_against else 0.0
     win_rate = wins / len(matches) if matches else 0.0
-    confidence = min(int(win_rate * 100 + avg_for * 10), 99)  # exemplo de confiança dinâmica
+    confidence = min(int(win_rate * 100 + avg_for * 10), 99)  # confiança dinâmica
     return {
         "avg_goals_for": avg_for,
         "avg_goals_against": avg_against,
