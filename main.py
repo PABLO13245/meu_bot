@@ -10,7 +10,7 @@ from analysis import (
     compute_team_metrics,
     decide_best_market,
     kickoff_time_local,
-    RELIABLE_LEAGUES
+    RELIABLE_LEAGUE_IDS
 )
 
 API_TOKEN = os.getenv("API_TOKEN")
@@ -19,7 +19,7 @@ CHAT_ID = os.getenv("CHAT_ID")
 TZ = pytz.timezone("America/Sao_Paulo")
 bot = Bot(token=TELEGRAM_TOKEN)
 TOP_QTY = 7
-MIN_CONFIDENCE = 10  # mínimo de confiança para mostrar
+MIN_CONFIDENCE = 10  # mínimo para mostrar no TOP
 
 async def build_message(fixtures, api_token, qty=TOP_QTY):
     now = datetime.now(TZ)
@@ -30,17 +30,14 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
     )
     lines = [header]
     count = 0
-    ignored_count = 0
 
-    for idx, f in enumerate(fixtures, start=1):
-        league_name = f.get("league", {}).get("name", "Desconhecida")
-        if league_name not in RELIABLE_LEAGUES:
-            ignored_count += 1
+    for f in fixtures:
+        league_id = f.get("league", {}).get("id")
+        if league_id not in RELIABLE_LEAGUE_IDS:
             continue
 
         participants = f.get("participants", [])
         if len(participants) < 2:
-            ignored_count += 1
             continue
 
         home = participants[0].get("name", "Casa")
@@ -51,17 +48,14 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
 
         hm = await compute_team_metrics(api_token, home_id)
         am = await compute_team_metrics(api_token, away_id)
-
         suggestion, confidence = decide_best_market(hm, am)
 
         if confidence < MIN_CONFIDENCE or suggestion == "Indefinido":
-            # pula para a próxima partida
-            ignored_count += 1
-            continue
+            continue  # pula para próxima partida
 
         part = (
             f"{count+1}. ⚽ {home} x {away}\n"
-            f"🏆 {league_name}  •  🕒 {kickoff_local}\n"
+            f"🏆 {f.get('league', {}).get('name', 'Desconhecida')}  •  🕒 {kickoff_local}\n"
             f"🎯 Sugestão principal: {suggestion}\n"
             f"💹 Confiança: {confidence}%\n"
             "──────────────────────────────\n"
@@ -71,12 +65,8 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         if count >= qty:
             break
 
-    if count == 0:
-        lines.append("⚠ Nenhuma partida confiável encontrada para análise nas próximas 48h.\n")
-    if ignored_count > 0:
-        lines.append(f"⚠ {ignored_count} partidas foram ignoradas por falta de dados confiáveis.\n")
-
-    lines.append("\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade.")
+    # Linha final simples
+    lines.append("🔎 Use responsabilidade.")
     return "\n".join(lines)
 
 async def run_analysis_send(qtd=TOP_QTY):
