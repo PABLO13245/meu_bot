@@ -7,19 +7,6 @@ import random
 BASE_URL = "https://api.sportmonks.com/v3/football"
 TZ = pytz.timezone("America/Sao_Paulo")
 
-# IDs de ligas confiáveis (incluindo Brasileirão)
-RELIABLE_LEAGUE_IDS = [
-    271,  # Premier League
-    301,  # La Liga
-    282,  # Bundesliga
-    293,  # Serie A
-    283,  # Ligue 1
-    285,  # Eredivisie
-    294,  # Primeira Liga
-    11,   # Brasileirão Série A
-    12    # Brasileirão Série B
-]
-
 # ===================================
 # BUSCAR PARTIDAS FUTURAS
 # ===================================
@@ -44,12 +31,11 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                         start_time = datetime.fromisoformat(
                             f["starting_at"].replace("Z", "+00:00")
                         ).astimezone(TZ)
-                        league_id = f.get("league", {}).get("id")
-                        if start_time > now and league_id in RELIABLE_LEAGUE_IDS:
+                        if start_time > now:
                             upcoming.append(f)
                     except Exception:
                         continue
-                print("Jogos encontrados após filtro:", len(upcoming))  # DEBUG
+                print("Jogos encontrados:", len(upcoming))  # DEBUG
                 return upcoming
     except Exception as e:
         print("⚠ Erro na requisição de partidas:", e)
@@ -86,7 +72,7 @@ def decide_best_market(home_metrics, away_metrics):
     elif goals_sum >= 2.0:
         options.append(("⚽ +1.5 Gols", "blue"))
     else:
-        options.append(("⚽ Ambas Marcam", "green"))
+        options.append(("💚 Ambas Marcam", "green"))
 
     # Vitória
     if win_diff >= 0.35:
