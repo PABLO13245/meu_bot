@@ -1,11 +1,16 @@
 import aiohttp
-from datetime import datetime
+from datetime import datetime, timezone
 import pytz
 import random
 
 # ========== CONFIGURAÇÕES ==========
 BASE_URL = "https://api.sportmonks.com/v3/football"
 TZ = pytz.timezone("America/Sao_Paulo")
+
+# Adicione os IDs das ligas que você deseja filtrar aqui, separados por vírgula.
+# Ex: Brasileirão (24), Premier League (2), La Liga (5).
+# Por padrão, está vazio para buscar todos os jogos, como no seu código original.
+LEAGUE_IDS = "" 
 
 # ===================================
 # BUSCAR PARTIDAS FUTURAS
@@ -17,48 +22,64 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
         f"&include=participants;league;season"
         f"&per_page=200"
     )
+    
+    # Adiciona o filtro de ligas, se a lista não estiver vazia
+    if LEAGUE_IDS:
+        url += f"&leagues={LEAGUE_IDS}"
+        
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if response.status != 200:
-                    print("❌ Erro ao buscar fixtures:", await response.text())
+                    print(f"❌ Erro ao buscar fixtures: {response.status} - {await response.text()}")
                     return []
+                
                 data = (await response.json()).get("data", [])
                 upcoming = []
-                now = datetime.now(TZ)
+                # Define 'now' como aware (UTC) para comparação correta
+                now = datetime.now(timezone.utc) 
+                
                 for f in data:
                     try:
-                        start_time = datetime.fromisoformat(
+                        # Converte a string de horário do fixture para um objeto datetime aware (UTC)
+                        start_time_utc = datetime.fromisoformat(
                             f["starting_at"].replace("Z", "+00:00")
-                        ).astimezone(TZ)
-                        if start_time > now:
+                        ).replace(tzinfo=timezone.utc)
+                        
+                        # Filtra apenas partidas futuras
+                        if start_time_utc > now:
                             upcoming.append(f)
-                    except Exception:
+                    except Exception as e:
+                        # Ignora fixtures com formato de horário inválido
+                        print(f"Erro ao processar horário do fixture {f.get('id', 'N/A')}: {e}")
                         continue
-                print("Jogos encontrados:", len(upcoming))  # DEBUG
+                        
+                print(f"✅ Jogos futuros encontrados: {len(upcoming)}")
                 return upcoming
     except Exception as e:
-        print("⚠ Erro na requisição de partidas:", e)
+        print(f"⚠ Erro na requisição de partidas: {e}")
         return []
 
 # ===================================
-# MÉTRICAS DO TIME (Mesmo sem histórico)
+# MÉTRICAS DO TIME (Simuladas)
 # ===================================
+# *IMPORTANTE:* Esta função continua GERANDO DADOS ALEATÓRIOS.
+# Para dados reais, você precisa implementar a busca por histórico da API aqui.
 async def compute_team_metrics(api_token, team_id, last=2):
-    # Gera métricas padrões se não houver histórico
+    # Gera métricas padrões se não houver histórico (SIMULAÇÃO)
     goals_for_avg = random.uniform(0.8, 1.8)
     goals_against_avg = random.uniform(0.8, 1.8)
     win_rate = random.uniform(0.3, 0.7)
-    confidence = int(win_rate*100)
+    confidence = int(win_rate * 100)
     return {
         "avg_goals_for": goals_for_avg,
         "avg_goals_against": goals_against_avg,
         "win_rate": win_rate,
-        "confidence": max(confidence, 10)
+        "confidence": max(confidence, 10) # Garante confiança mínima de 10%
     }
 
 # ===================================
-# DECIDIR MELHOR MERCADO (com escanteios)
+# DECIDIR MELHOR MERCADO
 # ===================================
 def decide_best_market(home_metrics, away_metrics):
     goals_sum = home_metrics["avg_goals_for"] + away_metrics["avg_goals_for"]
@@ -72,7 +93,11 @@ def decide_best_market(home_metrics, away_metrics):
     elif goals_sum >= 2.0:
         options.append(("⚽ +1.5 Gols", "blue"))
     else:
-        options.append(("💚 Ambas Marcam", "green"))
+        # Se as médias não apontam para muitos gols, sugere Ambas Marcam (se houver equilíbrio)
+        if abs(win_diff) < 0.3:
+             options.append(("💚 Ambas Marcam", "green"))
+        else:
+             options.append(("⚽ +1.5 Gols", "blue"))
 
     # Vitória
     if win_diff >= 0.35:
@@ -80,11 +105,15 @@ def decide_best_market(home_metrics, away_metrics):
     elif win_diff <= -0.35:
         options.append(("🏆 Vitória do Visitante", "yellow"))
 
-    # Escanteios
+    # Escanteios (Simulado, pois não usa métricas reais)
     options.append(("⚡ Mais de 8 Escanteios", "purple"))
 
-    suggestion, color = random.choice(options)
+    # Escolhe a sugestão de forma aleatória entre as opções válidas
+    suggestion, color = random.choice(options) 
+    
+    # A confiança é baseada na menor confiança entre os dois times
     confidence = min(home_metrics["confidence"], away_metrics["confidence"])
+    
     return suggestion, confidence
 
 # ===================================
@@ -92,10 +121,15 @@ def decide_best_market(home_metrics, away_metrics):
 # ===================================
 def kickoff_time_local(fixture, tz=TZ):
     try:
-        dt = datetime.fromisoformat(fixture["starting_at"].replace("Z", "+00:00")).astimezone(tz)
-        now = datetime.now(tz)
-        if dt.date() != now.date():
-            return dt.strftime("%H:%M — %d/%m")
-        return dt.strftime("%H:%M")
+        # Converte a hora do fixture (sempre UTC) para o fuso horário local (TZ)
+        dt_utc = datetime.fromisoformat(fixture["starting_at"].replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
+        dt_local = dt_utc.astimezone(tz)
+        
+        now_local = datetime.now(tz)
+        
+        # Verifica se o jogo é no mesmo dia
+        if dt_local.date() != now_local.date():
+            return dt_local.strftime("%H:%M — %d/%m")
+        return dt_local.strftime("%H:%M")
     except Exception:
         return "Horário indefinido"
