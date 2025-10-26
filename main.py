@@ -30,7 +30,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades (48h) 🔥\n\n"
+        f"🔥 Top {qty} Oportunidades (168h) 🔥\n\n"
     )
     lines = [header]
     
