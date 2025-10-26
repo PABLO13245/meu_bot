@@ -37,10 +37,14 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                 data = (await response.json()).get("data", [])
                 upcoming = []
                 
-                # CORREÇÃO CRUCIAL V3: Para comparação direta, usamos datetime.now() (naive)
-                # O servidor Render geralmente usa UTC como fuso horário padrão do sistema
+                # CORREÇÃO CRUCIAL V3: Usamos datetime.now() (naive)
+                # para comparar com o horário da API (que é recebido sem fuso horário).
                 now_naive = datetime.now()
                 
+                # ADICIONEI ESTE PRINT TEMPORÁRIO PARA DEBUG
+                if not data:
+                    print("AVISO: A API Sportmonks retornou uma lista 'data' vazia.")
+                    
                 for f in data:
                     try:
                         # 1. Cria o objeto datetime (naive) usando o formato exato da string da API
@@ -50,7 +54,6 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                         )
                         
                         # Filtra apenas partidas futuras fazendo a comparação de objetos NAIVE.
-                        # Isso garante que a comparação não seja afetada pela manipulação incorreta de TZ.
                         if start_time_naive > now_naive:
                             upcoming.append(f)
                     except Exception as e:
@@ -128,7 +131,7 @@ def kickoff_time_local(fixture, tz=TZ):
         dt_naive = datetime.strptime(fixture["starting_at"], "%Y-%m-%d %H:%M:%S")
         
         # 2. ANEXA a informação de fuso horário UTC (ASSUMINDO que a API retornou o tempo em UTC)
-        # Este é o ponto onde o fuso é forçado para permitir a conversão para BRT.
+        # É a melhor suposição para converter para BRT.
         dt_utc = dt_naive.replace(tzinfo=timezone.utc)
         
         # 3. Converte para o fuso horário local (TZ)
