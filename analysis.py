@@ -74,11 +74,16 @@ async def fetch_last_matches_for_team(session, api_token, team_id, last=2):
         print(f"⚠ Erro ao buscar partidas do time {team_id}:", e)
         return []
 
-async def compute_team_metrics(api_token, team_id, last=2):
+async def compute_team_metrics(api_token, team_id, last=0):
     async with aiohttp.ClientSession() as session:
         matches = await fetch_last_matches_for_team(session, api_token, team_id, last)
     if not matches:
-        return None
+        return {
+            "avg_goals_for": 0,
+            "avg_goals_against": 0,
+            "win_rate": 0,
+            "confidence": 10  # mínimo para não descartar
+        }
 
     goals_for, goals_against = [], []
     wins = 0
@@ -110,13 +115,10 @@ async def compute_team_metrics(api_token, team_id, last=2):
         except Exception:
             continue
 
-    if not goals_for:
-        return None
-
-    avg_for = mean(goals_for)
-    avg_against = mean(goals_against)
-    win_rate = wins / len(matches)
-    confidence = min(int(win_rate * 100 + avg_for * 10), 99)
+    avg_for = mean(goals_for) if goals_for else 0
+    avg_against = mean(goals_against) if goals_against else 0
+    win_rate = wins / len(matches) if matches else 0
+    confidence = max(min(int(win_rate * 100 + avg_for * 10), 99), 10)  # mínimo 10%
     return {
         "avg_goals_for": avg_for,
         "avg_goals_against": avg_against,
@@ -128,9 +130,6 @@ async def compute_team_metrics(api_token, team_id, last=2):
 # DECIDIR MELHOR MERCADO
 # ===================================
 def decide_best_market(home_metrics, away_metrics):
-    if not home_metrics or not away_metrics:
-        return "Indefinido", 0
-
     goals_sum = home_metrics["avg_goals_for"] + away_metrics["avg_goals_for"]
     win_diff = home_metrics["win_rate"] - away_metrics["win_rate"]
 
@@ -147,7 +146,7 @@ def decide_best_market(home_metrics, away_metrics):
     else:
         suggestion = "Indefinido"
 
-    confidence = min(home_metrics["confidence"], away_metrics["confidence"]) if home_metrics and away_metrics else 0
+    confidence = min(home_metrics["confidence"], away_metrics["confidence"])
     return suggestion, confidence
 
 # ===================================
