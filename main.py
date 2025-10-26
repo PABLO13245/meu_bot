@@ -44,7 +44,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         am = await compute_team_metrics(api_token, participants[1].get("id"))
         suggestion, confidence = decide_best_market(hm, am)
 
-        # Markdown com cores
+        # Markdown com emojis
         line = (
             f"⚽ {home} x {away}\n"
             f"🏆 {f.get('league', {}).get('name', 'Desconhecida')}  •  🕒 {kickoff_local}\n"
