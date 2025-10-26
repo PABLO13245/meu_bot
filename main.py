@@ -88,7 +88,7 @@ async def main():
         await run_analysis_send(TOP_QTY)
     await asyncio.Event().wait()  # mantém o bot ativo
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     missing = []
     if not API_TOKEN:
         missing.append("API_TOKEN")
