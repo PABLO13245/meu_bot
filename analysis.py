@@ -9,7 +9,6 @@ TZ = pytz.timezone("America/Sao_Paulo")
 
 # Adicione os IDs das ligas que você deseja filtrar aqui, separados por vírgula.
 # Ex: Brasileirão (24), Premier League (2), La Liga (5).
-# Por padrão, está vazio para buscar todos os jogos.
 LEAGUE_IDS = "" 
 
 # ===================================
@@ -23,7 +22,6 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
         f"&per_page=200"
     )
     
-    # Adiciona o filtro de ligas, se a lista não estiver vazia
     if LEAGUE_IDS:
         url += f"&leagues={LEAGUE_IDS}"
         
@@ -37,11 +35,11 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                 data = (await response.json()).get("data", [])
                 upcoming = []
                 
-                # CORREÇÃO CRÍTICA: Usa datetime.now() (naive)
-                now_naive = datetime.now()
+                # CORREÇÃO FINAL: Define 'now' como aware (UTC)
+                now_aware_utc = datetime.now(timezone.utc)
                 
                 # PRINTS DE DEBUG TEMPORÁRIOS PARA DIAGNÓSTICO:
-                print(f"DEBUG: Horário de Execução (Naive): {now_naive.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"DEBUG: Horário de Execução (UTC): {now_aware_utc.strftime('%Y-%m-%d %H:%M:%S')}")
                 if data:
                     print(f"DEBUG: Primeiro Jogo Encontrado na API: {data[0].get('starting_at')}")
                     print(f"DEBUG: Jogos totais recebidos da API: {len(data)}")
@@ -51,17 +49,19 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                 
                 for f in data:
                     try:
-                        # CORREÇÃO CRÍTICA: Usa strptime para ler o formato exato da string da API
+                        # 1. Cria o objeto datetime (naive) usando o formato exato da string da API
                         start_time_naive = datetime.strptime(
                             f["starting_at"], 
                             "%Y-%m-%d %H:%M:%S"
                         )
                         
-                        # Filtra apenas partidas futuras fazendo a comparação de objetos NAIVE.
-                        if start_time_naive > now_naive:
+                        # 2. Força o objeto a ser AWARE (UTC), que é a suposição mais segura para a API
+                        start_time_aware_utc = start_time_naive.replace(tzinfo=timezone.utc)
+                        
+                        # Filtra apenas partidas futuras, comparando dois objetos AWARE em UTC
+                        if start_time_aware_utc > now_aware_utc:
                             upcoming.append(f)
                     except Exception as e:
-                        # Ignora fixtures com formato de horário inválido
                         print(f"Erro ao processar horário do fixture {f.get('id', 'N/A')}: {e}")
                         continue
                         
@@ -74,9 +74,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
 # ===================================
 # MÉTRICAS DO TIME (Simuladas)
 # ===================================
-# *IMPORTANTE:* Esta função continua GERANDO DADOS ALEATÓRIOS para a confiança.
 async def compute_team_metrics(api_token, team_id, last=2):
-    # Gera métricas padrões se não houver histórico (SIMULAÇÃO)
     goals_for_avg = random.uniform(0.8, 1.8)
     goals_against_avg = random.uniform(0.8, 1.8)
     win_rate = random.uniform(0.3, 0.7)
@@ -85,7 +83,7 @@ async def compute_team_metrics(api_token, team_id, last=2):
         "avg_goals_for": goals_for_avg,
         "avg_goals_against": goals_against_avg,
         "win_rate": win_rate,
-        "confidence": max(confidence, 10) # Garante confiança mínima de 10%
+        "confidence": max(confidence, 10)
     }
 
 # ===================================
@@ -97,31 +95,24 @@ def decide_best_market(home_metrics, away_metrics):
 
     options = []
 
-    # Gols
     if goals_sum >= 2.8:
         options.append(("⚽ +2.5 Gols", "blue"))
     elif goals_sum >= 2.0:
         options.append(("⚽ +1.5 Gols", "blue"))
     else:
-        # Se as médias não apontam para muitos gols, sugere Ambas Marcam (se houver equilíbrio)
         if abs(win_diff) < 0.3:
              options.append(("💚 Ambas Marcam", "green"))
         else:
              options.append(("⚽ +1.5 Gols", "blue"))
 
-    # Vitória
     if win_diff >= 0.35:
         options.append(("🏆 Vitória da Casa", "yellow"))
     elif win_diff <= -0.35:
         options.append(("🏆 Vitória do Visitante", "yellow"))
 
-    # Escanteios (Simulado, pois não usa métricas reais)
     options.append(("⚡ Mais de 8 Escanteios", "purple"))
 
-    # Escolhe a sugestão de forma aleatória entre as opções válidas
     suggestion, color = random.choice(options) 
-    
-    # A confiança é baseada na menor confiança entre os dois times
     confidence = min(home_metrics["confidence"], away_metrics["confidence"])
     
     return suggestion, confidence
@@ -131,19 +122,13 @@ def decide_best_market(home_metrics, away_metrics):
 # ===================================
 def kickoff_time_local(fixture, tz=TZ):
     try:
-        # 1. Cria o objeto datetime (naive) a partir da string da API
         dt_naive = datetime.strptime(fixture["starting_at"], "%Y-%m-%d %H:%M:%S")
-        
-        # 2. ANEXA a informação de fuso horário UTC (ASSUMINDO que a API retornou o tempo em UTC)
-        # Necessário para fazer a conversão correta para o fuso BRT.
         dt_utc = dt_naive.replace(tzinfo=timezone.utc)
         
-        # 3. Converte para o fuso horário local (TZ)
         dt_local = dt_utc.astimezone(tz)
         
         now_local = datetime.now(tz)
         
-        # Verifica se o jogo é no mesmo dia
         if dt_local.date() != now_local.date():
             return dt_local.strftime("%H:%M — %d/%m")
         return dt_local.strftime("%H:%M")
