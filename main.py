@@ -38,22 +38,21 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
             continue
         home = participants[0].get("name", "Casa")
         away = participants[1].get("name", "Fora")
-        home_id = participants[0].get("id")
-        away_id = participants[1].get("id")
         kickoff_local = kickoff_time_local(f, TZ)
 
-        hm = await compute_team_metrics(api_token, home_id)
-        am = await compute_team_metrics(api_token, away_id)
+        hm = await compute_team_metrics(api_token, participants[0].get("id"))
+        am = await compute_team_metrics(api_token, participants[1].get("id"))
         suggestion, confidence = decide_best_market(hm, am)
 
-        part = (
+        # Markdown com cores
+        line = (
             f"⚽ {home} x {away}\n"
             f"🏆 {f.get('league', {}).get('name', 'Desconhecida')}  •  🕒 {kickoff_local}\n"
             f"🎯 Sugestão: {suggestion}\n"
             f"💹 Confiança: {confidence}%\n"
             "──────────────────────────────\n"
         )
-        lines.append(part)
+        lines.append(line)
         count += 1
 
     lines.append("🔎 Use responsabilidade.")
