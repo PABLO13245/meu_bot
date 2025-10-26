@@ -38,13 +38,18 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                 upcoming = []
                 
                 # CORREÇÃO CRUCIAL V3: Usamos datetime.now() (naive)
-                # para comparar com o horário da API (que é recebido sem fuso horário).
+                # O servidor Render geralmente usa UTC como fuso horário padrão do sistema
                 now_naive = datetime.now()
                 
-                # ADICIONEI ESTE PRINT TEMPORÁRIO PARA DEBUG
-                if not data:
-                    print("AVISO: A API Sportmonks retornou uma lista 'data' vazia.")
-                    
+                # PRINTS DE DEBUG TEMPORÁRIOS PARA DIAGNÓSTICO:
+                print(f"DEBUG: Horário de Execução (Naive): {now_naive.strftime('%Y-%m-%d %H:%M:%S')}")
+                if data:
+                    print(f"DEBUG: Primeiro Jogo Encontrado na API: {data[0].get('starting_at')}")
+                    print(f"DEBUG: Jogos totais recebidos da API: {len(data)}")
+                else:
+                    print("DEBUG: Array de dados (data) da API está VAZIO. O problema é o TOKEN ou a COBERTURA.")
+                # FIM DOS PRINTS DE DEBUG
+                
                 for f in data:
                     try:
                         # 1. Cria o objeto datetime (naive) usando o formato exato da string da API
