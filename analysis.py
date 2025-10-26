@@ -55,7 +55,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100):
 # ===================================
 # COLETAR DADOS DOS TIMES
 # ===================================
-async def fetch_last_matches_for_team(session, api_token, team_id, last=3):
+async def fetch_last_matches_for_team(session, api_token, team_id, last=2):
     url = (
         f"{BASE_URL}/fixtures?api_token={api_token}"
         f"&include=participants;stats"
