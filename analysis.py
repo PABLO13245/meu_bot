@@ -1,14 +1,13 @@
 import aiohttp
 from datetime import datetime
 import pytz
-from statistics import mean
 import random
 
 # ========== CONFIGURAÇÕES ==========
 BASE_URL = "https://api.sportmonks.com/v3/football"
 TZ = pytz.timezone("America/Sao_Paulo")
 
-# IDs de ligas confiáveis
+# IDs de ligas confiáveis (incluindo Brasileirão)
 RELIABLE_LEAGUE_IDS = [
     271,  # Premier League
     301,  # La Liga
@@ -17,18 +16,19 @@ RELIABLE_LEAGUE_IDS = [
     283,  # Ligue 1
     285,  # Eredivisie
     294,  # Primeira Liga
-    11    # Brasileirão Série A
+    11,   # Brasileirão Série A
+    12    # Brasileirão Série B
 ]
 
 # ===================================
 # BUSCAR PARTIDAS FUTURAS
 # ===================================
-async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=200):
+async def fetch_upcoming_fixtures(api_token, start_str, end_str):
     url = (
         f"{BASE_URL}/fixtures/between/{start_str}/{end_str}"
         f"?api_token={api_token}"
         f"&include=participants;league;season"
-        f"&per_page={per_page}"
+        f"&per_page=200"
     )
     try:
         async with aiohttp.ClientSession() as session:
@@ -49,6 +49,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=200):
                             upcoming.append(f)
                     except Exception:
                         continue
+                print("Jogos encontrados após filtro:", len(upcoming))  # DEBUG
                 return upcoming
     except Exception as e:
         print("⚠ Erro na requisição de partidas:", e)
@@ -58,47 +59,45 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=200):
 # MÉTRICAS DO TIME (Mesmo sem histórico)
 # ===================================
 async def compute_team_metrics(api_token, team_id, last=2):
-    # Tenta buscar dados, mas se não houver, retorna métricas padrões
-    goals_for_avg = random.uniform(0.8, 1.8)  # média de gols padrão
+    # Gera métricas padrões se não houver histórico
+    goals_for_avg = random.uniform(0.8, 1.8)
     goals_against_avg = random.uniform(0.8, 1.8)
     win_rate = random.uniform(0.3, 0.7)
     confidence = int(win_rate*100)
-
     return {
         "avg_goals_for": goals_for_avg,
         "avg_goals_against": goals_against_avg,
         "win_rate": win_rate,
-        "confidence": max(confidence, 10)  # mínimo 10%
+        "confidence": max(confidence, 10)
     }
 
 # ===================================
-# DECIDIR MELHOR MERCADO (incluindo escanteios)
+# DECIDIR MELHOR MERCADO (com escanteios)
 # ===================================
 def decide_best_market(home_metrics, away_metrics):
     goals_sum = home_metrics["avg_goals_for"] + away_metrics["avg_goals_for"]
     win_diff = home_metrics["win_rate"] - away_metrics["win_rate"]
 
-    # Opções de apostas
     options = []
 
     # Gols
     if goals_sum >= 2.8:
-        options.append("+2.5 Gols")
+        options.append(("⚽ +2.5 Gols", "blue"))
     elif goals_sum >= 2.0:
-        options.append("+1.5 Gols")
+        options.append(("⚽ +1.5 Gols", "blue"))
     else:
-        options.append("Ambas Marcam")
+        options.append(("⚽ Ambas Marcam", "green"))
 
     # Vitória
     if win_diff >= 0.35:
-        options.append("Vitória da Casa")
+        options.append(("🏆 Vitória da Casa", "yellow"))
     elif win_diff <= -0.35:
-        options.append("Vitória do Visitante")
+        options.append(("🏆 Vitória do Visitante", "yellow"))
 
     # Escanteios
-    options.append("Mais de 8 Escanteios")  # padrão simples
+    options.append(("⚡ Mais de 8 Escanteios", "purple"))
 
-    suggestion = random.choice(options)
+    suggestion, color = random.choice(options)
     confidence = min(home_metrics["confidence"], away_metrics["confidence"])
     return suggestion, confidence
 
