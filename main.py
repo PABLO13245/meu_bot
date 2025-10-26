@@ -30,7 +30,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades (168h) 🔥\n\n"
+        f"🔥 Top {qty} Oportunidades (48h) 🔥\n\n"
     )
     lines = [header]
     
@@ -94,7 +94,7 @@ async def run_analysis_send(qtd=TOP_QTY):
     # O Sportmonks requer que as datas estejam no formato UTC
     now_utc = datetime.now(timezone.utc)
     start_str = now_utc.strftime("%Y-%m-%d")
-    end_str = (now_utc + timedelta(hours=48)).strftime("%Y-%m-%d")
+    end_str = (now_utc + timedelta(days=7)).strftime("%Y-%m-%d")
     
     print(f"\nIniciando análise para o período: {start_str} a {end_str} (UTC)")
     
