@@ -9,7 +9,7 @@ TZ = pytz.timezone("America/Sao_Paulo")
 
 # Adicione os IDs das ligas que você deseja filtrar aqui, separados por vírgula.
 # Ex: Brasileirão (24), Premier League (2), La Liga (5).
-# Por padrão, está vazio para buscar todos os jogos, como no seu código original.
+# Por padrão, está vazio para buscar todos os jogos.
 LEAGUE_IDS = "" 
 
 # ===================================
@@ -36,27 +36,22 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                 
                 data = (await response.json()).get("data", [])
                 upcoming = []
-                # Define 'now' como aware (UTC) para comparação correta
-                now = datetime.now(timezone.utc) 
+                
+                # CORREÇÃO CRUCIAL V3: Para comparação direta, usamos datetime.now() (naive)
+                # O servidor Render geralmente usa UTC como fuso horário padrão do sistema
+                now_naive = datetime.now()
                 
                 for f in data:
                     try:
-                        # CORREÇÃO CRUCIAL AQUI: O Sportmonks envia a hora no formato "YYYY-MM-DD HH:MM:SS"
-                        # e, na maioria dos casos, representa o UTC, mas sem o 'Z'.
-                        
-                        # 1. Cria o objeto datetime (naive) usando o formato da string
+                        # 1. Cria o objeto datetime (naive) usando o formato exato da string da API
                         start_time_naive = datetime.strptime(
                             f["starting_at"], 
                             "%Y-%m-%d %H:%M:%S"
                         )
                         
-                        # 2. Torna-o aware, assumindo que a API o envia em UTC
-                        start_time_utc = start_time_naive.replace(tzinfo=timezone.utc)
-                        
-                        # Filtra apenas partidas futuras (state_id 1 = Not Started)
-                        # Usar a comparação de horário é o método mais robusto aqui, 
-                        # pois inclui jogos agendados para muito depois.
-                        if start_time_utc > now:
+                        # Filtra apenas partidas futuras fazendo a comparação de objetos NAIVE.
+                        # Isso garante que a comparação não seja afetada pela manipulação incorreta de TZ.
+                        if start_time_naive > now_naive:
                             upcoming.append(f)
                     except Exception as e:
                         # Ignora fixtures com formato de horário inválido
@@ -129,11 +124,14 @@ def decide_best_market(home_metrics, away_metrics):
 # ===================================
 def kickoff_time_local(fixture, tz=TZ):
     try:
-        # Usa a mesma lógica de parser corrigida
+        # 1. Cria o objeto datetime (naive) a partir da string da API
         dt_naive = datetime.strptime(fixture["starting_at"], "%Y-%m-%d %H:%M:%S")
+        
+        # 2. ANEXA a informação de fuso horário UTC (ASSUMINDO que a API retornou o tempo em UTC)
+        # Este é o ponto onde o fuso é forçado para permitir a conversão para BRT.
         dt_utc = dt_naive.replace(tzinfo=timezone.utc)
         
-        # Converte para o fuso horário local (TZ)
+        # 3. Converte para o fuso horário local (TZ)
         dt_local = dt_utc.astimezone(tz)
         
         now_local = datetime.now(tz)
