@@ -19,8 +19,9 @@ CHAT_ID = os.getenv("CHAT_ID")
 TZ = pytz.timezone("America/Sao_Paulo")
 bot = Bot(token=TELEGRAM_TOKEN)
 TOP_QTY = 7
+MIN_CONFIDENCE = 10  # mínimo de confiança para mostrar
 
-async def build_message(fixtures, api_token, qty=7):
+async def build_message(fixtures, api_token, qty=TOP_QTY):
     now = datetime.now(TZ)
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
@@ -31,14 +32,16 @@ async def build_message(fixtures, api_token, qty=7):
     count = 0
     ignored_count = 0
 
-    async def analyze_fixture(f, idx):
+    for idx, f in enumerate(fixtures, start=1):
         league_name = f.get("league", {}).get("name", "Desconhecida")
         if league_name not in RELIABLE_LEAGUES:
-            return None, True
+            ignored_count += 1
+            continue
 
         participants = f.get("participants", [])
         if len(participants) < 2:
-            return None, True
+            ignored_count += 1
+            continue
 
         home = participants[0].get("name", "Casa")
         away = participants[1].get("name", "Fora")
@@ -48,38 +51,32 @@ async def build_message(fixtures, api_token, qty=7):
 
         hm = await compute_team_metrics(api_token, home_id)
         am = await compute_team_metrics(api_token, away_id)
+
         suggestion, confidence = decide_best_market(hm, am)
 
+        if confidence < MIN_CONFIDENCE or suggestion == "Indefinido":
+            # pula para a próxima partida
+            ignored_count += 1
+            continue
+
         part = (
-            f"{idx}. ⚽ {home} x {away}\n"
+            f"{count+1}. ⚽ {home} x {away}\n"
             f"🏆 {league_name}  •  🕒 {kickoff_local}\n"
             f"🎯 Sugestão principal: {suggestion}\n"
             f"💹 Confiança: {confidence}%\n"
             "──────────────────────────────\n"
         )
-        return part, False
-
-    tasks = [analyze_fixture(f, idx) for idx, f in enumerate(fixtures, start=1)]
-    results = await asyncio.gather(*tasks)
-
-    for res, ignored in results:
-        if ignored:
-            ignored_count += 1
-            continue
-        if res:
-            lines.append(res)
-            count += 1
-            if count >= qty:
-                break
+        lines.append(part)
+        count += 1
+        if count >= qty:
+            break
 
     if count == 0:
-        lines.append("⚠ Nenhuma partida encontrada para análise nas próximas 48h.\n")
-
+        lines.append("⚠ Nenhuma partida confiável encontrada para análise nas próximas 48h.\n")
     if ignored_count > 0:
-        lines.append(f"⚠ {ignored_count} partidas foram ignoradas por não estarem em ligas confiáveis.\n")
+        lines.append(f"⚠ {ignored_count} partidas foram ignoradas por falta de dados confiáveis.\n")
 
-    footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
-    lines.append(footer)
+    lines.append("\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade.")
     return "\n".join(lines)
 
 async def run_analysis_send(qtd=TOP_QTY):
@@ -88,9 +85,6 @@ async def run_analysis_send(qtd=TOP_QTY):
     end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%d")
     try:
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=100)
-        if not fixtures:
-            await bot.send_message(chat_id=CHAT_ID, text="⚠ Nenhuma partida encontrada nas próximas 48h.")
-            return
         fixtures = sorted(fixtures, key=lambda x: x.get("starting_at", ""))
         message = await build_message(fixtures, API_TOKEN, qtd)
         await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
@@ -112,9 +106,8 @@ def start_scheduler():
 async def main():
     start_scheduler()
     if os.getenv("TEST_NOW", "0") == "1":
-        print("TEST_NOW=1 -> enviando teste imediato")
         await run_analysis_send(TOP_QTY)
-    await asyncio.Event().wait()  # mantém bot vivo
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     missing = []
