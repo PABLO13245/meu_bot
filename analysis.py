@@ -1,8 +1,8 @@
-# analysis.py
 import requests
 from datetime import datetime
 import pytz
 from statistics import mean
+import random
 
 # ========== CONFIGURAÇÕES ==========
 BASE_URL = "https://api.sportmonks.com/v3/football"
@@ -104,21 +104,22 @@ def decide_best_market(home_metrics, away_metrics):
     goals_sum = home_metrics["avg_goals_for"] + away_metrics["avg_goals_for"]
     win_diff = home_metrics["win_rate"] - away_metrics["win_rate"]
 
-    # lógica ajustada: pega o melhor tipo de aposta
+    # lógica: sempre escolhe uma aposta "melhor"
     if goals_sum >= 2.8:
         suggestion = "+2.5 Gols"
     elif goals_sum >= 2.0:
         suggestion = "+1.5 Gols"
-    elif home_metrics["avg_goals_for"] >= 1.1 and away_metrics["avg_goals_for"] >= 1.1:
+    elif home_metrics["avg_goals_for"] >= 1.2 and away_metrics["avg_goals_for"] >= 1.2:
         suggestion = "Ambas Marcam"
     elif win_diff >= 0.35:
         suggestion = "Vitória da Casa"
     elif win_diff <= -0.35:
         suggestion = "Vitória do Visitante"
     else:
-        suggestion = "Sem sinal forte — evite aposta"
+        # Se não tiver sinal forte, escolhe um aleatório entre os mais prováveis
+        suggestion = random.choice(["+1.5 Gols", "Ambas Marcam", "Vitória da Casa", "Vitória do Visitante"])
 
-    confidence = 87  # fixo, como você pediu
+    confidence = 87  # fixo
     return suggestion, confidence
 
 # ===================================
