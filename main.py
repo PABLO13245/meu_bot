@@ -1,142 +1,105 @@
-import asyncio
 import os
-import pytz
-import random
-import sys
+import asyncio
 from datetime import datetime, timedelta, timezone
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from telegram import Bot
+import pytz
 
-# IMPORTAÇÕES LOCAIS
-# Certifique-se de que analysis.py e telegram_bot.py estão no mesmo diretório
-# Assumimos que o telegram_bot é responsável por telegram_send_message
-from analysis import fetch_upcoming_fixtures, compute_team_metrics, decide_best_market, kickoff_time_local
-from telegram_bot import telegram_send_message 
+from analysis import (
+    fetch_upcoming_fixtures,
+    compute_team_metrics,
+    decide_best_market,
+    kickoff_time_local
+)
 
-# ========== CONFIGURAÇÕES GLOBAIS ==========
-# Use os tokens fornecidos pelas variáveis de ambiente do Render
-API_TOKEN = os.environ.get("SPORTMONKS_API_TOKEN")
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+API_TOKEN = os.getenv("API_TOKEN")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+TZ = pytz.timezone("America/Sao_Paulo")
+bot = Bot(token=TELEGRAM_TOKEN)
+TOP_QTY = 7
 
-# Quantidade de jogos que você quer analisar e enviar
-TOP_QTY = 3 
+async def build_message(fixtures, api_token, qty=TOP_QTY):
+    now = datetime.now(TZ)
+    header = (
+        f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
+        f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
+        f"🔥 Top {qty} Oportunidades (48h) 🔥\n\n"
+    )
+    lines = [header]
+    count = 0
 
-# =================================================================
-# LISTA DE GRUPOS DE LIGAS PARA ANÁLISE (PREENCHA AQUI)
-# Cada item da lista deve ser uma string de IDs de ligas separados por vírgula.
-# Exemplo de IDs: 8 (Premier League), 384 (Serie A), 564 (La Liga)
-# Mantenha cada grupo com a quantidade de times que você deseja (ex: 7)
-# =================================================================
-LEAGUE_GROUPS = [
-    # GRUPO 1: Substitua "ID1,ID2,..." pelos seus primeiros 7 IDs de ligas.
-    "ID1,ID2,ID3,ID4,ID5,ID6,ID7", 
-    
-    # GRUPO 2: Substitua "ID8,ID9,..." pelos seus próximos 7 IDs de ligas.
-    "ID8,ID9,ID10,ID11,ID12,ID13,ID14",
-    
-    # GRUPO 3: Substitua "ID15,ID16,..." pelos seus últimos 7 IDs de ligas.
-    "ID15,ID16,ID17,ID18,ID19,ID20,ID21"
-]
-# =================================================================
+    for f in fixtures:
+        if count >= qty:
+            break
 
+        participants = f.get("participants", [])
+        if len(participants) < 2:
+            continue
+        home = participants[0].get("name", "Casa")
+        away = participants[1].get("name", "Fora")
+        kickoff_local = kickoff_time_local(f, TZ)
 
-# ===================================================
-# FUNÇÃO PRINCIPAL: RODA ANÁLISES E ENVIA MENSAGENS
-# ===================================================
-async def run_analysis_send(qtd_top_qty):
-    if not API_TOKEN or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Erro: Tokens de API ou Telegram não configurados nas variáveis de ambiente.")
-        return
+        hm = await compute_team_metrics(api_token, participants[0].get("id"))
+        am = await compute_team_metrics(api_token, participants[1].get("id"))
+        suggestion, confidence = decide_best_market(hm, am)
 
-    # O Sportmonks requer que as datas estejam no formato UTC
-    now_utc = datetime.now(timezone.utc)
-    start_str = now_utc.strftime("%Y-%m-%d")
-    # Busca de 7 dias
-    end_str = (now_utc + timedelta(days=7)).strftime("%Y-%m-%d") 
-    
-    print(f"\nIniciando análise para o período: {start_str} a {end_str} (UTC)")
-    
-    # Loop para rodar as 3 análises separadas
-    for i, league_set in enumerate(LEAGUE_GROUPS):
-        print(f"\n--- INICIANDO ANÁLISE DO GRUPO {i+1} ({len(league_set.split(','))} ligas) ---")
-        
-        try:
-            # 1. BUSCA DE FIXTURES (Partidas)
-            # Passa o conjunto de ligas (league_set) para a função
-            fixtures = await fetch_upcoming_fixtures(
-                API_TOKEN, 
-                start_str, 
-                end_str, 
-                league_ids=league_set # <--- Argumento league_ids para o analysis.py
-            )
-            
-            if not fixtures:
-                print(f"❌ Não foram encontrados jogos futuros para o Grupo {i+1} com estes filtros.")
-                continue # Pula para o próximo grupo
+        # Markdown com emojis
+        line = (
+            f"⚽ {home} x {away}\n"
+            f"🏆 {f.get('league', {}).get('name', 'Desconhecida')}  •  🕒 {kickoff_local}\n"
+            f"🎯 Sugestão: {suggestion}\n"
+            f"💹 Confiança: {confidence}%\n"
+            "──────────────────────────────\n"
+        )
+        lines.append(line)
+        count += 1
 
-            # 2. PROCESSAMENTO E GERAÇÃO DE SUGESTÕES
-            filtered_suggestions = []
-            
-            for fixture in fixtures:
-                # Simula a obtenção de métricas (na versão real, esta função usaria API)
-                home_metrics = await compute_team_metrics(API_TOKEN, fixture["participants"][0]["id"])
-                away_metrics = await compute_team_metrics(API_TOKEN, fixture["participants"][1]["id"])
-                
-                # Decisão do Mercado
-                market_suggestion, confidence = decide_best_market(home_metrics, away_metrics)
-                
-                # Formata a mensagem
-                home_team = fixture["participants"][0]["name"]
-                away_team = fixture["participants"][1]["name"]
-                
-                message = (
-                    f"⏰ {kickoff_time_local(fixture)} | {fixture['league']['name']}\n"
-                    f"🏆 {home_team} vs {away_team}\n"
-                    f"🔥 Sugestão: {market_suggestion} (Confiança: {confidence}%)"
-                )
-                
-                filtered_suggestions.append({
-                    "confidence": confidence,
-                    "message": message
-                })
+    lines.append("🔎 Use responsabilidade.")
+    return "\n".join(lines)
 
-            # 3. FILTRO FINAL E ENVIO
-            # Ordena por confiança e seleciona os TOP QTY
-            filtered_suggestions.sort(key=lambda x: x["confidence"], reverse=True)
-            top_suggestions = [s["message"] for s in filtered_suggestions[:qtd_top_qty]]
-
-            if top_suggestions:
-                header = f"🚀 TOP {len(top_suggestions)} ANÁLISES PARA O GRUPO {i+1}\n"
-                full_message = header + "\n\n".join(top_suggestions)
-                
-                await telegram_send_message(full_message, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
-                print(f"✅ Mensagens enviadas com sucesso para o Telegram para o Grupo {i+1}.")
-            else:
-                print(f"❌ Nenhuma sugestão com alta confiança para o Grupo {i+1}.")
-
-            # Espera 5 segundos para evitar saturar a API (importante para o Rate Limit)
-            await asyncio.sleep(5) 
-            
-        except Exception as e:
-            print(f"⚠ Erro fatal durante a análise do Grupo {i+1}: {e}")
-    
-    print("\nAnálise de todos os grupos concluída.")
-
-
-# ===================================================
-# PONTO DE ENTRADA DO SCRIPT
-# ===================================================
-if __name__ == "__main__":
+async def run_analysis_send(qtd=TOP_QTY):
+    now = datetime.now(timezone.utc)
+    start_str = now.strftime("%Y-%m-%d")
+    end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%d")
     try:
-        # Modo de teste imediato, usado para debugar no Web Shell do Render
-        if "TEST_NOW" in os.environ:
-            print("Modo de teste imediato ativado.")
-            asyncio.run(run_analysis_send(TOP_QTY))
-            
-        # Modo de execução agendada (usando o agendador do Render)
-        else:
-            # O Render roda o bot nos horários configurados (06:00, 16:00, 19:00)
-            print("Execução agendada iniciada.")
-            asyncio.run(run_analysis_send(TOP_QTY))
-
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str)
+        fixtures = sorted(fixtures, key=lambda x: x.get("starting_at", ""))
+        message = await build_message(fixtures, API_TOKEN, qtd)
+        await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
     except Exception as e:
-        print(f"🚨 Erro na execução principal: {e}")
+        print("Erro run_analysis_send:", e)
+        try:
+            await bot.send_message(chat_id=CHAT_ID, text=f"❌ Erro na análise: {e}")
+        except Exception:
+            pass
+
+def start_scheduler():
+    scheduler = AsyncIOScheduler(timezone=TZ)
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=6, minute=0)
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=16, minute=0)
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0)
+    scheduler.start()
+    print("Scheduler started: 06:00, 16:00, 19:00 BRT")
+
+async def main():
+    start_scheduler()
+    if os.getenv("TEST_NOW", "0") == "1":
+        await run_analysis_send(TOP_QTY)
+    await asyncio.Event().wait()  # mantém o bot ativo
+
+if _name_ == "_main_":
+    missing = []
+    if not API_TOKEN:
+        missing.append("API_TOKEN")
+    if not TELEGRAM_TOKEN:
+        missing.append("TELEGRAM_TOKEN")
+    if not CHAT_ID:
+        missing.append("CHAT_ID")
+    if missing:
+        print("⚠ Variáveis de ambiente ausentes:", missing)
+        import sys; sys.exit(1)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot interrompido manualmente.")
