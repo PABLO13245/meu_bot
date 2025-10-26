@@ -9,8 +9,7 @@ from analysis import (
     fetch_upcoming_fixtures,
     compute_team_metrics,
     decide_best_market,
-    kickoff_time_local,
-    RELIABLE_LEAGUE_IDS
+    kickoff_time_local
 )
 
 API_TOKEN = os.getenv("API_TOKEN")
@@ -19,7 +18,6 @@ CHAT_ID = os.getenv("CHAT_ID")
 TZ = pytz.timezone("America/Sao_Paulo")
 bot = Bot(token=TELEGRAM_TOKEN)
 TOP_QTY = 7
-MIN_CONFIDENCE = 10  # mínimo para mostrar no TOP
 
 async def build_message(fixtures, api_token, qty=TOP_QTY):
     now = datetime.now(TZ)
@@ -32,14 +30,12 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
     count = 0
 
     for f in fixtures:
-        league_id = f.get("league", {}).get("id")
-        if league_id not in RELIABLE_LEAGUE_IDS:
-            continue
+        if count >= qty:
+            break
 
         participants = f.get("participants", [])
         if len(participants) < 2:
             continue
-
         home = participants[0].get("name", "Casa")
         away = participants[1].get("name", "Fora")
         home_id = participants[0].get("id")
@@ -50,8 +46,9 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         am = await compute_team_metrics(api_token, away_id)
         suggestion, confidence = decide_best_market(hm, am)
 
-        if confidence < MIN_CONFIDENCE or suggestion == "Indefinido":
-            continue  # pula para próxima partida
+        # Ignora apenas partidas sem dados
+        if hm is None or am is None:
+            continue
 
         part = (
             f"{count+1}. ⚽ {home} x {away}\n"
@@ -62,10 +59,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         )
         lines.append(part)
         count += 1
-        if count >= qty:
-            break
 
-    # Linha final simples
     lines.append("🔎 Use responsabilidade.")
     return "\n".join(lines)
 
