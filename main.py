@@ -47,9 +47,9 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         suggestion, confidence = decide_best_market(hm, am)
 
         part = (
-            f"{count+1}. ⚽ {home} x {away}\n"
+            f"⚽ {home} x {away}\n"
             f"🏆 {f.get('league', {}).get('name', 'Desconhecida')}  •  🕒 {kickoff_local}\n"
-            f"🎯 Sugestão principal: {suggestion}\n"
+            f"🎯 Sugestão: {suggestion}\n"
             f"💹 Confiança: {confidence}%\n"
             "──────────────────────────────\n"
         )
@@ -64,7 +64,7 @@ async def run_analysis_send(qtd=TOP_QTY):
     start_str = now.strftime("%Y-%m-%d")
     end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%d")
     try:
-        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=200)
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str)
         fixtures = sorted(fixtures, key=lambda x: x.get("starting_at", ""))
         message = await build_message(fixtures, API_TOKEN, qtd)
         await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
