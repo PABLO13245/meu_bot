@@ -41,12 +41,21 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                 
                 for f in data:
                     try:
-                        # Converte a string de horário do fixture para um objeto datetime aware (UTC)
-                        start_time_utc = datetime.fromisoformat(
-                            f["starting_at"].replace("Z", "+00:00")
-                        ).replace(tzinfo=timezone.utc)
+                        # CORREÇÃO CRUCIAL AQUI: O Sportmonks envia a hora no formato "YYYY-MM-DD HH:MM:SS"
+                        # e, na maioria dos casos, representa o UTC, mas sem o 'Z'.
                         
-                        # Filtra apenas partidas futuras
+                        # 1. Cria o objeto datetime (naive) usando o formato da string
+                        start_time_naive = datetime.strptime(
+                            f["starting_at"], 
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                        
+                        # 2. Torna-o aware, assumindo que a API o envia em UTC
+                        start_time_utc = start_time_naive.replace(tzinfo=timezone.utc)
+                        
+                        # Filtra apenas partidas futuras (state_id 1 = Not Started)
+                        # Usar a comparação de horário é o método mais robusto aqui, 
+                        # pois inclui jogos agendados para muito depois.
                         if start_time_utc > now:
                             upcoming.append(f)
                     except Exception as e:
@@ -63,8 +72,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
 # ===================================
 # MÉTRICAS DO TIME (Simuladas)
 # ===================================
-# *IMPORTANTE:* Esta função continua GERANDO DADOS ALEATÓRIOS.
-# Para dados reais, você precisa implementar a busca por histórico da API aqui.
+# *IMPORTANTE:* Esta função continua GERANDO DADOS ALEATÓRIOS para a confiança.
 async def compute_team_metrics(api_token, team_id, last=2):
     # Gera métricas padrões se não houver histórico (SIMULAÇÃO)
     goals_for_avg = random.uniform(0.8, 1.8)
@@ -121,8 +129,11 @@ def decide_best_market(home_metrics, away_metrics):
 # ===================================
 def kickoff_time_local(fixture, tz=TZ):
     try:
-        # Converte a hora do fixture (sempre UTC) para o fuso horário local (TZ)
-        dt_utc = datetime.fromisoformat(fixture["starting_at"].replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
+        # Usa a mesma lógica de parser corrigida
+        dt_naive = datetime.strptime(fixture["starting_at"], "%Y-%m-%d %H:%M:%S")
+        dt_utc = dt_naive.replace(tzinfo=timezone.utc)
+        
+        # Converte para o fuso horário local (TZ)
         dt_local = dt_utc.astimezone(tz)
         
         now_local = datetime.now(tz)
