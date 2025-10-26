@@ -1,4 +1,3 @@
-# main.py
 import os
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -13,17 +12,14 @@ from analysis import (
     kickoff_time_local
 )
 
-# CONFIGURAÇÕES via ENV
-API_TOKEN = os.getenv("API_TOKEN")            # SportMonks token
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Telegram bot token
-CHAT_ID = os.getenv("CHAT_ID")                # chat id (string)
+API_TOKEN = os.getenv("API_TOKEN")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 TZ = pytz.timezone("America/Sao_Paulo")
 bot = Bot(token=TELEGRAM_TOKEN)
-
-# Quantidade de partidas por envio (você pediu 7)
 TOP_QTY = 7
 
-def build_message(fixtures, api_token, qty=7):
+async def build_message(fixtures, api_token, qty=7):
     now = datetime.now(TZ)
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
@@ -31,14 +27,12 @@ def build_message(fixtures, api_token, qty=7):
         f"🔥 Top {qty} Oportunidades (48h) 🔥\n\n"
     )
     lines = [header]
-
     count = 0
-    for idx, f in enumerate(fixtures, start=1):
-        if count >= qty:
-            break
+
+    async def analyze_fixture(f, idx):
         participants = f.get("participants", [])
         if len(participants) < 2:
-            continue
+            return None
         home = participants[0].get("name", "Casa")
         away = participants[1].get("name", "Fora")
         league = f.get("league", {}).get("name", "Desconhecida")
@@ -46,11 +40,8 @@ def build_message(fixtures, api_token, qty=7):
         away_id = participants[1].get("id")
         kickoff_local = kickoff_time_local(f, TZ)
 
-        # calcula métricas
-        hm = compute_team_metrics(api_token, home_id, last=5)
-        am = compute_team_metrics(api_token, away_id, last=5)
-
-        # decide a melhor aposta
+        hm = await compute_team_metrics(api_token, home_id)
+        am = await compute_team_metrics(api_token, away_id)
         suggestion, confidence = decide_best_market(hm, am)
 
         part = (
@@ -60,34 +51,38 @@ def build_message(fixtures, api_token, qty=7):
             f"💹 Confiança: {confidence}%\n"
             "──────────────────────────────\n"
         )
-        lines.append(part)
-        count += 1
+        return part
+
+    tasks = [analyze_fixture(f, idx) for idx, f in enumerate(fixtures, start=1)]
+    results = await asyncio.gather(*tasks)
+
+    for res in results:
+        if res:
+            lines.append(res)
+            count += 1
+            if count >= qty:
+                break
 
     if count == 0:
         lines.append("⚠ Nenhuma partida encontrada para análise nas próximas 48h.\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
-    # return single string (Markdown)
     return "\n".join(lines)
 
 async def run_analysis_send(qtd=TOP_QTY):
-    # build date range: next 48h (SportMonks accepts YYYY-MM-DD for between)
     now = datetime.now(timezone.utc)
     start_str = now.strftime("%Y-%m-%d")
     end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%d")
-
     try:
-        fixtures = fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=100)
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=100)
         if not fixtures:
             await bot.send_message(chat_id=CHAT_ID, text="⚠ Nenhuma partida encontrada nas próximas 48h.")
             return
-        # sort by starting_at
         fixtures = sorted(fixtures, key=lambda x: x.get("starting_at", ""))
-        message = await asyncio.to_thread(build_message, fixtures, API_TOKEN, qtd)
+        message = await build_message(fixtures, API_TOKEN, qtd)
         await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
     except Exception as e:
-        # log and send minimal error
         print("Erro run_analysis_send:", e)
         try:
             await bot.send_message(chat_id=CHAT_ID, text=f"❌ Erro na análise: {e}")
@@ -96,7 +91,6 @@ async def run_analysis_send(qtd=TOP_QTY):
 
 def start_scheduler():
     scheduler = AsyncIOScheduler(timezone=TZ)
-    # 06:00, 16:00, 19:00 BRT
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=6, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=16, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0)
@@ -105,16 +99,12 @@ def start_scheduler():
 
 async def main():
     start_scheduler()
-    # test-on-start support
     if os.getenv("TEST_NOW", "0") == "1":
         print("TEST_NOW=1 -> enviando teste imediato")
         await run_analysis_send(TOP_QTY)
-    # keep alive
-    while True:
-        await asyncio.sleep(60)
+    await asyncio.Event().wait()  # mantém bot vivo
 
 if __name__ == "__main__":
-    # quick check for env variables
     missing = []
     if not API_TOKEN:
         missing.append("API_TOKEN")
@@ -124,10 +114,7 @@ if __name__ == "__main__":
         missing.append("CHAT_ID")
     if missing:
         print("⚠ Variáveis de ambiente ausentes:", missing)
-        print("Defina-as antes de rodar. Exemplo (bash):")
-        print(' export API_TOKEN="seu_token"')
-        print(' export TELEGRAM_TOKEN="seu_telegram_token"')
-        print(' export CHAT_ID="sua_chat_id"')
+        import sys; sys.exit(1)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
