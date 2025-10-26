@@ -37,8 +37,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                 data = (await response.json()).get("data", [])
                 upcoming = []
                 
-                # CORREÇÃO CRUCIAL V3: Usamos datetime.now() (naive)
-                # O servidor Render geralmente usa UTC como fuso horário padrão do sistema
+                # CORREÇÃO CRÍTICA: Usa datetime.now() (naive)
                 now_naive = datetime.now()
                 
                 # PRINTS DE DEBUG TEMPORÁRIOS PARA DIAGNÓSTICO:
@@ -52,7 +51,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str):
                 
                 for f in data:
                     try:
-                        # 1. Cria o objeto datetime (naive) usando o formato exato da string da API
+                        # CORREÇÃO CRÍTICA: Usa strptime para ler o formato exato da string da API
                         start_time_naive = datetime.strptime(
                             f["starting_at"], 
                             "%Y-%m-%d %H:%M:%S"
@@ -136,7 +135,7 @@ def kickoff_time_local(fixture, tz=TZ):
         dt_naive = datetime.strptime(fixture["starting_at"], "%Y-%m-%d %H:%M:%S")
         
         # 2. ANEXA a informação de fuso horário UTC (ASSUMINDO que a API retornou o tempo em UTC)
-        # É a melhor suposição para converter para BRT.
+        # Necessário para fazer a conversão correta para o fuso BRT.
         dt_utc = dt_naive.replace(tzinfo=timezone.utc)
         
         # 3. Converte para o fuso horário local (TZ)
