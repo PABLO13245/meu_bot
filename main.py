@@ -9,7 +9,8 @@ from analysis import (
     fetch_upcoming_fixtures,
     compute_team_metrics,
     decide_best_market,
-    kickoff_time_local
+    kickoff_time_local,
+    RELIABLE_LEAGUES
 )
 
 API_TOKEN = os.getenv("API_TOKEN")
@@ -28,14 +29,19 @@ async def build_message(fixtures, api_token, qty=7):
     )
     lines = [header]
     count = 0
+    ignored_count = 0
 
     async def analyze_fixture(f, idx):
+        league_name = f.get("league", {}).get("name", "Desconhecida")
+        if league_name not in RELIABLE_LEAGUES:
+            return None, True
+
         participants = f.get("participants", [])
         if len(participants) < 2:
-            return None
+            return None, True
+
         home = participants[0].get("name", "Casa")
         away = participants[1].get("name", "Fora")
-        league = f.get("league", {}).get("name", "Desconhecida")
         home_id = participants[0].get("id")
         away_id = participants[1].get("id")
         kickoff_local = kickoff_time_local(f, TZ)
@@ -46,17 +52,20 @@ async def build_message(fixtures, api_token, qty=7):
 
         part = (
             f"{idx}. ⚽ {home} x {away}\n"
-            f"🏆 {league}  •  🕒 {kickoff_local}\n"
+            f"🏆 {league_name}  •  🕒 {kickoff_local}\n"
             f"🎯 Sugestão principal: {suggestion}\n"
             f"💹 Confiança: {confidence}%\n"
             "──────────────────────────────\n"
         )
-        return part
+        return part, False
 
     tasks = [analyze_fixture(f, idx) for idx, f in enumerate(fixtures, start=1)]
     results = await asyncio.gather(*tasks)
 
-    for res in results:
+    for res, ignored in results:
+        if ignored:
+            ignored_count += 1
+            continue
         if res:
             lines.append(res)
             count += 1
@@ -65,6 +74,9 @@ async def build_message(fixtures, api_token, qty=7):
 
     if count == 0:
         lines.append("⚠ Nenhuma partida encontrada para análise nas próximas 48h.\n")
+
+    if ignored_count > 0:
+        lines.append(f"⚠ {ignored_count} partidas foram ignoradas por não estarem em ligas confiáveis.\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
