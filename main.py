@@ -170,7 +170,7 @@ async def run_analysis_send(qtd=TOP_QTY):
 
 def start_scheduler():
     scheduler = AsyncIOScheduler(timezone=TZ)
-    # 06:00, 16:00, 19:00 BRT
+    # 00:00, 06:00, 12:00 BRT
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=6, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=16, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0)
