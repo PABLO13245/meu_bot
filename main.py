@@ -19,25 +19,28 @@ CHAT_ID = os.getenv("CHAT_ID")                # chat id (string)
 TZ = pytz.timezone("America/Sao_Paulo")
 bot = Bot(token=TELEGRAM_TOKEN)
 
-# Quantidade de partidas por envio
-TOP_QTY = 7
+# Quantidade de partidas por envio. Pode ser um número alto para pegar todas do dia.
+TOP_QTY = 999 
 
 async def build_message(fixtures, api_token, qty=TOP_QTY):
     now = datetime.now(TZ)
     header = (
-        f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
+        f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS DE HOJE)\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades (48 horas) 🔥\n\n" 
+        f"⚽ Oportunidades do Dia ({len(fixtures)} Jogos Encontrados) ⚽\n\n" 
     )
     lines = [header]
 
     count = 0
     for idx, f in enumerate(fixtures, start=1):
+        # Como o TOP_QTY é alto, ele deve incluir todas.
         if count >= qty:
             break
+            
         participants = f.get("participants", [])
         if len(participants) < 2:
             continue
+            
         home = participants[0].get("name", "Casa")
         away = participants[1].get("name", "Fora")
         league = f.get("league", {}).get("name", "Desconhecida")
@@ -63,7 +66,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         count += 1
 
     if count == 0:
-        lines.append("⚠ Nenhuma partida encontrada para análise nos próximos 2 dias.\n")
+        lines.append("⚠ Nenhuma partida encontrada para análise hoje.\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
@@ -71,23 +74,24 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
     return "\n".join(lines)
 
 async def run_analysis_send(qtd=TOP_QTY):
-    # build date range: next 2 days (SportMonks accepts YYYY-MM-DD for between)
+    # CRÍTICO: build date range: Apenas hoje (0 dias)
     now = datetime.now(timezone.utc)
     
-    # GARANTE A BUSCA POR 7 DIAS COMPLETOS
+    # Busca do início do dia (hoje) até o final do dia (hoje)
     start_str = now.strftime("%Y-%m-%d")
-    end_str = (now + timedelta(days=2)).strftime("%Y-%m-%d")
+    # Para buscar apenas o dia de hoje, o end_str deve ser o mesmo que o start_str.
+    end_str = start_str 
 
     try:
-        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=100)
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=500)
         
         if not fixtures:
-            message = f"⚠ Nenhuma partida encontrada entre {start_str} e {end_str}. Verifique seu API_TOKEN e ligas."
+            message = f"⚠ Nenhuma partida agendada para hoje ({start_str}). Verifique seu API_TOKEN e ligas."
             print(message)
             await bot.send_message(chat_id=CHAT_ID, text=message)
             return
             
-        # sort by starting_at
+        # sort by starting_at (para que a ordem seja cronológica)
         fixtures = sorted(fixtures, key=lambda x: x.get("starting_at", ""))
         
         message = await build_message(fixtures, API_TOKEN, qtd)
@@ -104,7 +108,7 @@ async def run_analysis_send(qtd=TOP_QTY):
 
 def start_scheduler():
     scheduler = AsyncIOScheduler(timezone=TZ)
-    # 06:00, 16:00, 19:00 BRT
+    # Mantendo os horários de envio: 06:00, 16:00, 19:00 BRT
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=6, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=16, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0)
