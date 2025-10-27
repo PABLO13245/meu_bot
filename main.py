@@ -24,7 +24,7 @@ bot = Bot(token=TELEGRAM_TOKEN)
 # Quantidade de partidas por envio (limite de TOP Oportunidades)
 TOP_QTY = 7
 
-# CORREÇÃO: Função build_message agora aceita fixtures já ordenados
+# Função build_message agora aceita fixtures já ordenados
 async def build_message(fixtures, api_token, qty=7):
     now = datetime.now(TZ)
     
@@ -62,7 +62,7 @@ async def build_message(fixtures, api_token, qty=7):
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS DE HOJE)\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades 🔥\n\n"
+        f"🔥 Top {qty} Oportunidades Encontradas 🔥\n\n"
     )
     lines = [header]
 
@@ -121,14 +121,13 @@ async def run_analysis_send(qtd=TOP_QTY):
     now = datetime.now(timezone.utc)
     # Start e End são a mesma data para filtrar apenas hoje
     start_str = now.strftime("%Y-%m-%d")
-    end_str = start_str # Busca apenas a data de hoje
     
     # Flag para debug
     print(f"DEBUG: Buscando jogos de {start_str} nas Ligas Filtradas.")
 
     try:
-        # CORREÇÃO: Passando apenas a data de início para buscar apenas hoje
-        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str=start_str, per_page=100)
+        # CORREÇÃO: Passando apenas a data de início (start_str)
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, per_page=100)
         
         # Filtro final para garantir que apenas jogos de HOJE passem
         now_local = datetime.now(TZ).date()
@@ -142,8 +141,6 @@ async def run_analysis_send(qtd=TOP_QTY):
             await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para hoje ({now_local.strftime('%d/%m')}) nas ligas filtradas.")
             return
             
-        # Não é mais necessário ordenar por starting_at aqui, pois vamos ordenar por confiança
-        
         # Chamada assíncrona para build_message, que agora faz a análise e ordenação
         message = await build_message(filtered_fixtures, API_TOKEN, qtd)
         
