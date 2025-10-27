@@ -15,7 +15,7 @@ STATE_FUTURE_IDS = "1,3"
 # ===================================
 # BUSCAR PARTIDAS FUTURAS
 # ===================================
-async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, league_ids=None):
+async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=500, league_ids=None):
     # Formato do filtro de datas no V3: filters=dates:YYYY-MM-DD,YYYY-MM-DD
     dates_filter = f"{start_str},{end_str}"
     
@@ -47,6 +47,8 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
 
                 data = (await response.json()).get("data", [])
                 upcoming = []
+                # Define o dia de hoje (em UTC) para checagem manual
+                today_utc = datetime.now(timezone.utc).date()
                 # Adiciona 1 minuto de margem para evitar descarte por milissegundos
                 now_utc_plus_margin = datetime.now(timezone.utc) + timedelta(minutes=1) 
 
@@ -55,8 +57,11 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
                         # O campo starting_at da API está em UTC, mas sem tzinfo
                         dt = datetime.strptime(f["starting_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
                         
-                        # FILTRAGEM MAIS TOLERANTE:
-                        # Se o jogo ainda não começou ou começou há menos de 1 minuto, considere-o.
+                        # FILTRO CRÍTICO 1: Garante que o jogo seja no dia de hoje (UTC)
+                        if dt.date() != today_utc:
+                            continue # Pula jogos que não são de hoje
+
+                        # FILTRO CRÍTICO 2: Garante que o jogo ainda não tenha começado
                         if dt > now_utc_plus_margin:
                             upcoming.append(f)
                     except Exception as parse_e:
@@ -121,8 +126,9 @@ def kickoff_time_local(fixture, tz=TZ):
 
         # Se for um jogo que não é hoje, retorna a data e hora
         if dt_local.date() != now_local.date():
-            return dt_local.strftime("%H:%M — %d/%m")
-        
+            # A mensagem deve ser apenas a hora, pois sabemos que é hoje.
+            return dt_local.strftime("%H:%M — %d/%m") # mantendo o formato caso algo passe
+
         # Se for um jogo de hoje, retorna apenas a hora
         return dt_local.strftime("%H:%M") 
 
