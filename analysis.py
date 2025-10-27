@@ -36,7 +36,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
         url += f"&filter[league_id]={league_ids}" 
 
     print(f"DEBUG: Buscando jogos de {start_str} a {end_str}")
-    print(f"DEBUG: URL de Requisição: {url.split('api_token=')[0]}... (token omitido)") # Omitindo token no log por segurança
+    print(f"DEBUG: URL de Requisição: {url.split('api_token=')[0]}... (LIyB9jTXwDBzwu6aaxIt9vY0qXTiBUfHhADwkWa1ZHyWQhJYjyVgiqCcm4c8)") # Omitindo token no log por segurança
 
     try:
         async with aiohttp.ClientSession() as session:
