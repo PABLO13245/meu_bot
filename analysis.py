@@ -6,7 +6,7 @@ import pytz
 # Configurações Base
 BASE_URL = "https://api.sportmonks.com/v3/football"
 STATE_FUTURE_IDS = "1,3" # 1=Awaiting, 3=Scheduled (para planos que não veem apenas o 3)
-# IDs de Ligas Tier 1 para filtrar
+# IDs de Ligas Tier 1 para filtrar (A SportMonks V3 tem IDs diferentes)
 TRUSTED_LEAGUE_IDS = "8,5,13,3,17,463,2,141" # Ex: Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Brasileirão A, Champions, MLS
 
 # Mapeamento de Países para Bandeiras (Emojis)
@@ -23,26 +23,23 @@ def get_flag_emoji(country_code):
 # FUNÇÕES DE BUSCA DA API
 # ----------------------------------------------------------------------
 
-async def fetch_upcoming_fixtures(api_token, start_date, end_date=None, per_page=100):
+async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
     """Busca jogos futuros na API da SportMonks, filtrando por data e ligas."""
     
-    dates_filter = start_date
-    if end_date and end_date != start_date:
-        dates_filter = f"{start_date},{end_date}"
-    
     # Filtro de data, estado e ligas
-    main_filters = f"dates:{dates_filter};fixtureStates:{STATE_FUTURE_IDS};leagueIds:{TRUSTED_LEAGUE_IDS}"
+    # O V3 usa 'date' para buscar apenas a data única.
+    main_filters = f"dates:{start_date};fixtureStates:{STATE_FUTURE_IDS};leagueIds:{TRUSTED_LEAGUE_IDS}"
     
     url = (
         f"{BASE_URL}/fixtures"
         f"?api_token={api_token}"
-        f"&include=participants;league;season"
+        f"&include=participants;league;season;participants.country"
         f"&filters={main_filters}"
         f"&per_page={per_page}"
     )
     
     # DEBUG: URL de Requisição (token omitido por segurança)
-    print(f"DEBUG: Buscando jogos de {start_date} até {end_date if end_date != start_date else start_date} nas Ligas Filtradas.")
+    print(f"DEBUG: Buscando jogos de {start_date} nas Ligas Filtradas.")
     print(f"DEBUG: URL de Requisição: {url.split('api_token=')[0]}... (token omitido) - TESTE ESTA URL NO NAVEGADOR!")
     
     try:
@@ -65,21 +62,12 @@ async def fetch_upcoming_fixtures(api_token, start_date, end_date=None, per_page
 async def compute_team_metrics(api_token, team_id, last=5):
     """
     Simula a busca e cálculo de métricas de uma equipe.
-    Na vida real, esta função faria várias chamadas a endpoints como:
-    /teams/{team_id}/last_fixtures, /teams/{team_id}/stats
     """
     
-    # Simulação: Na ausência de lógica de análise real,
-    # retornamos dados simulados com variações para que a ordenação funcione.
-    
-    # Nota: Não fazemos chamadas reais para evitar hitting de rate limits e complexidade.
-    
-    # Simula um resultado de "ultimos 5 jogos":
-    # [Gols Marcados, Gols Sofridos, Jogos Vencidos, Gols Médios Marcados, Gols Médios Sofridos]
-    
-    # Gera uma pequena variação para simular diferentes estatísticas de times
+    # Simulação: Retornamos dados simulados com variações para que a ordenação funcione.
     import random
     
+    # Gera uma pequena variação para simular diferentes estatísticas de times
     if random.random() < 0.1: # 10% de chance de ter um time ruim
         gols_marcados = random.randint(0, 5)
         gols_sofridos = random.randint(5, 10)
