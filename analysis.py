@@ -9,6 +9,13 @@ STATE_FUTURE_IDS = "1,3" # 1=Awaiting, 3=Scheduled (para planos que não veem ap
 # IDs de Ligas Tier 1 para filtrar (A SportMonks V3 tem IDs diferentes)
 TRUSTED_LEAGUE_IDS = "8,5,13,3,17,463,2,141" # Ex: Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Brasileirão A, Champions, MLS
 
+# Mapeamento manual para corrigir ligas onde o código do país está ausente
+MANUAL_COUNTRY_MAP = {
+    # Exemplo: Allsvenskan (Suécia)
+    "Allsvenskan": "SE", 
+    # Adicione outras ligas conforme necessário se aparecerem com '🇽🇽'
+}
+
 # Mapeamento de Países para Bandeiras (Emojis)
 def get_flag_emoji(country_code):
     """Converte o código de país (ISO 3166-1 alpha-2) em emoji de bandeira."""
@@ -27,13 +34,13 @@ async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
     """Busca jogos futuros na API da SportMonks, filtrando por data e ligas."""
     
     # Filtro de data, estado e ligas
-    # O V3 usa 'date' para buscar apenas a data única.
+    # Incluindo 'participants.country' e 'league.country' para tentar buscar as bandeiras
     main_filters = f"dates:{start_date};fixtureStates:{STATE_FUTURE_IDS};leagueIds:{TRUSTED_LEAGUE_IDS}"
     
     url = (
         f"{BASE_URL}/fixtures"
         f"?api_token={api_token}"
-        f"&include=participants;league;season;participants.country"
+        f"&include=participants;league;season;participants.country;league.country"
         f"&filters={main_filters}"
         f"&per_page={per_page}"
     )
@@ -52,6 +59,20 @@ async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
                 data = await response.json()
                 fixtures = data.get("data", [])
                 
+                # CORREÇÃO PÓS-PROCESSAMENTO: Injetar códigos de país se ausentes (Bandeiras)
+                for f in fixtures:
+                    league_name = f.get("league", {}).get("name")
+                    
+                    # 1. Tenta usar mapeamento manual para a liga
+                    if league_name in MANUAL_COUNTRY_MAP:
+                        country_code = MANUAL_COUNTRY_MAP[league_name]
+                        f['league']['country'] = {'code': country_code}
+                        
+                        # 2. Injeta o código do país da liga nos times (se o time não tiver)
+                        for p in f.get('participants', []):
+                            if 'country' not in p or not p['country'].get('code'):
+                                p['country'] = {'code': country_code}
+
                 print(f"✅ Jogos futuros encontrados (Ligas Filtradas): {len(fixtures)}")
                 return fixtures
                 
@@ -62,6 +83,7 @@ async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
 async def compute_team_metrics(api_token, team_id, last=5):
     """
     Simula a busca e cálculo de métricas de uma equipe.
+    (Em uma versão real, este seria o ponto onde você buscar a performance real do time)
     """
     
     # Simulação: Retornamos dados simulados com variações para que a ordenação funcione.
