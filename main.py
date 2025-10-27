@@ -67,7 +67,7 @@ async def build_message(fixtures, api_token, qty=7):
     if count == 0:
         lines.append("⚠ Nenhuma partida encontrada para análise nas próximas 48h.\n")
 
-    footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
+    footer = "\n🔎 Obs: análise baseada em últimos 1 jogos. Use responsabilidade."
     lines.append(footer)
     # return single string (Markdown)
     return "\n".join(lines)
