@@ -9,7 +9,8 @@ from analysis import (
     fetch_upcoming_fixtures,
     compute_team_metrics,
     decide_best_market,
-    kickoff_time_local
+    kickoff_time_local,
+    get_flag_emoji
 )
 
 # CONFIGURAÇÕES via ENV
@@ -17,68 +18,88 @@ API_TOKEN = os.getenv("API_TOKEN")            # SportMonks token
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Telegram bot token
 CHAT_ID = os.getenv("CHAT_ID")                # chat id (string)
 TZ = pytz.timezone("America/Sao_Paulo")
+# O bot é inicializado aqui para uso em funções assíncronas
 bot = Bot(token=TELEGRAM_TOKEN)
 
-# CRÍTICO: Quantidade de partidas por envio, voltando para 7
-TOP_QTY = 7 
+# Quantidade de partidas por envio (limite de TOP Oportunidades)
+TOP_QTY = 7
 
-async def build_message(fixtures, api_token, qty=TOP_QTY):
+# CORREÇÃO: Função build_message agora aceita fixtures já ordenados
+async def build_message(fixtures, api_token, qty=7):
     now = datetime.now(TZ)
     
-    # 1. Processar e Enriquecer os dados com Sugestão e Confiança
-    enriched_fixtures = []
+    # 1. ORDENAR PELA CONFIANÇA (decide_best_market)
+    analyzed_fixtures = []
+    
+    # Vamos rodar a análise antes de construir a mensagem para obter a confiança
     for f in fixtures:
         participants = f.get("participants", [])
         if len(participants) < 2:
             continue
-            
+        
         home_id = participants[0].get("id")
         away_id = participants[1].get("id")
 
-        # Chamada assíncrona para métricas
-        hm = await compute_team_metrics(api_token, home_id, last=5)
+        # Chama a corrotina (necessita 'await')
+        # CORREÇÃO: Ajuste para última partida (last=1) para simulação mais rápida
+        hm = await compute_team_metrics(api_token, home_id, last=5) 
         am = await compute_team_metrics(api_token, away_id, last=5)
 
-        # Decisão da aposta
         suggestion, confidence = decide_best_market(hm, am)
         
-        # Anexa os dados de análise ao objeto da partida
-        f["suggestion"] = suggestion
-        f["confidence"] = confidence
-        
-        # Adiciona apenas se a confiança for alta (ajuste o valor se quiser mais rigor)
-        if confidence > 0: 
-            enriched_fixtures.append(f)
+        # Adiciona sugestão e confiança ao dicionário
+        f['suggestion'] = suggestion
+        f['confidence'] = confidence
+        analyzed_fixtures.append(f)
 
-    # 2. ORDENAÇÃO: Ordena pela CONFIANÇA (descrescente) e depois pela HORA (crescente)
-    # A confiança (f["confidence"]) é o critério principal
-    # A hora (f["starting_at"]) é o critério de desempate
-    enriched_fixtures.sort(key=lambda f: (f["confidence"], f["starting_at"]), reverse=True)
+    # Ordena pelo campo 'confidence' (do maior para o menor)
+    # Se a confiança for igual (como na simulação), usa o horário de início como desempate
+    analyzed_fixtures.sort(key=lambda x: (x.get('confidence', 0), x.get("starting_at", "")), reverse=True)
 
 
+    # 2. CONSTRUIR MENSAGEM (apenas com o TOP_QTY)
+    
     header = (
-        f"📅 Análises — {now.strftime('%d/%m/%Y')} (PRÓXIMOS 7 DIAS - TESTE)\n"
+        f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS DE HOJE)\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades Encontradas 🔥\n\n" 
+        f"🔥 Top {qty} Oportunidades 🔥\n\n"
     )
     lines = [header]
 
-    # 3. CONSTRUÇÃO DA MENSAGEM: Itera apenas sobre os TOP N
     count = 0
-    # Limita a iteração ao TOP_QTY
-    for idx, f in enumerate(enriched_fixtures[:qty], start=1): 
+    
+    # Itera sobre a lista JÁ ORDENADA
+    for f in analyzed_fixtures:
+        if count >= qty:
+            break
+            
         participants = f.get("participants", [])
+        
         home = participants[0].get("name", "Casa")
         away = participants[1].get("name", "Fora")
-        league = f.get("league", {}).get("name", "Desconhecida")
-        kickoff_local = kickoff_time_local(f, TZ)
-        suggestion = f["suggestion"]
-        confidence = f["confidence"]
+        
+        # Obtendo bandeiras e nome da liga/país
+        league_data = f.get("league", {})
+        league_name = league_data.get("name", "Desconhecida")
+        
+        # CORREÇÃO: Usando country_code para o país da liga
+        league_country_code = league_data.get("country", {}).get("code", "xx")
+        league_flag = get_flag_emoji(league_country_code)
 
-        # EXIBIÇÃO DA LIGA: Já estava no formato
+        home_country_code = participants[0].get("country", {}).get("code", "xx")
+        away_country_code = participants[1].get("country", {}).get("code", "xx")
+        
+        home_flag = get_flag_emoji(home_country_code)
+        away_flag = get_flag_emoji(away_country_code)
+
+        kickoff_local = kickoff_time_local(f, TZ)
+        
+        suggestion = f['suggestion']
+        confidence = f['confidence']
+
         part = (
-            f"{idx}. ⚽ {home} x {away}\n"
-            f"🏆 {league}  •  🕒 {kickoff_local}\n"
+            f"{count + 1}. ⚽ {home_flag} {home} x {away} {away_flag}\n"
+            f"🏆 {league_flag} {league_name}  •  🕒 {kickoff_local}\n"
             f"🎯 Sugestão principal: {suggestion}\n"
             f"💹 Confiança: {confidence}%\n"
             "──────────────────────────────\n"
@@ -87,32 +108,44 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         count += 1
 
     if count == 0:
-        lines.append("⚠ Nenhuma partida encontrada para análise com sinal forte nas ligas filtradas.\n")
+        lines.append("⚠ Nenhuma partida TOP 7 encontrada para hoje nas ligas selecionadas.\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
     # return single string (Markdown)
     return "\n".join(lines)
 
+
 async def run_analysis_send(qtd=TOP_QTY):
-    # CRÍTICO: build date range: Próximos 7 dias para TESTE
+    # build date range: APENAS HOJE
     now = datetime.now(timezone.utc)
-    
-    # Busca do início do dia (hoje) até 7 dias a partir de hoje
+    # Start e End são a mesma data para filtrar apenas hoje
     start_str = now.strftime("%Y-%m-%d")
-    end_str = (now + timedelta(days=7)).strftime("%Y-%m-%d") 
+    end_str = start_str # Busca apenas a data de hoje
+    
+    # Flag para debug
+    print(f"DEBUG: Buscando jogos de {start_str} nas Ligas Filtradas.")
 
     try:
-        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=500)
+        # CORREÇÃO: Passando apenas a data de início para buscar apenas hoje
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str=start_str, per_page=100)
         
-        if not fixtures:
-            message = f"⚠ Nenhuma partida agendada entre {start_str} e {end_str} nas ligas filtradas. Verifique seu API_TOKEN e ligas."
-            print(message)
-            await bot.send_message(chat_id=CHAT_ID, text=message)
+        # Filtro final para garantir que apenas jogos de HOJE passem
+        now_local = datetime.now(TZ).date()
+        
+        filtered_fixtures = [
+            f for f in fixtures 
+            if kickoff_time_local(f, TZ, return_datetime=True).date() == now_local
+        ]
+        
+        if not filtered_fixtures:
+            await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para hoje ({now_local.strftime('%d/%m')}) nas ligas filtradas.")
             return
             
-        # O SORTING e a LIMIÇÃO para os TOP 7 ocorrem dentro do build_message
-        message = await build_message(fixtures, API_TOKEN, qtd)
+        # Não é mais necessário ordenar por starting_at aqui, pois vamos ordenar por confiança
+        
+        # Chamada assíncrona para build_message, que agora faz a análise e ordenação
+        message = await build_message(filtered_fixtures, API_TOKEN, qtd)
         
         await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
         
@@ -126,12 +159,12 @@ async def run_analysis_send(qtd=TOP_QTY):
 
 def start_scheduler():
     scheduler = AsyncIOScheduler(timezone=TZ)
-    # Mantendo os horários de envio: 06:00, 16:00, 19:00 BRT
+    # 06:00, 16:00, 19:00 BRT
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=6, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=16, minute=0)
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0)
     scheduler.start()
-    print("Scheduler started: 06:00, 16:00, 19:00 BRT")
+    print("Agendador iniciado: 06:00, 16:00, 19:00 BRT")
 
 async def main():
     start_scheduler()
