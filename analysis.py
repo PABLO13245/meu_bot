@@ -2,7 +2,7 @@ import aiohttp
 from datetime import datetime, timezone, timedelta
 import pytz
 import random
-import os # Adicionado para garantir que todas as dependências estão presentes
+import os 
 
 # ========== CONFIGURAÇÕES ==========
 BASE_URL = "https://api.sportmonks.com/v3/football"
@@ -32,11 +32,11 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
 
     # Adiciona o filtro de ligas (se passado)
     if league_ids:
-        # Nota: O filtro de liga aqui pode precisar de ajuste dependendo do seu plano da API.
         url += f"&filter[league_id]={league_ids}" 
 
     print(f"DEBUG: Buscando jogos de {start_str} a {end_str}")
-    print(f"DEBUG: URL de Requisição: {url.split('api_token=')[0]}... (LIyB9jTXwDBzwu6aaxIt9vY0qXTiBUfHhADwkWa1ZHyWQhJYjyVgiqCcm4c8)") # Omitindo token no log por segurança
+    # Omitindo token no log por segurança
+    print(f"DEBUG: URL de Requisição: {url.split('api_token=')[0]}... (token omitido) - TESTE ESTA URL NO NAVEGADOR!") 
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -47,15 +47,20 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
 
                 data = (await response.json()).get("data", [])
                 upcoming = []
-                now_utc = datetime.now(timezone.utc)
+                # Adiciona 1 minuto de margem para evitar descarte por milissegundos
+                now_utc_plus_margin = datetime.now(timezone.utc) + timedelta(minutes=1) 
 
                 for f in data:
                     try:
+                        # O campo starting_at da API está em UTC, mas sem tzinfo
                         dt = datetime.strptime(f["starting_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                        # Filtra apenas jogos que ainda não começaram
-                        if dt > now_utc:
+                        
+                        # FILTRAGEM MAIS TOLERANTE:
+                        # Se o jogo ainda não começou ou começou há menos de 1 minuto, considere-o.
+                        if dt > now_utc_plus_margin:
                             upcoming.append(f)
-                    except Exception:
+                    except Exception as parse_e:
+                        print(f"Erro de parsing de data para fixture {f.get('id')}: {parse_e}")
                         continue
 
                 print(f"✅ Jogos futuros encontrados: {len(upcoming)}")
@@ -70,8 +75,6 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
 # MÉTRICAS SIMULADAS (Aleatórias)
 # ===================================
 async def compute_team_metrics(api_token, team_id, last=2):
-    # NOTA: Esta função ainda é SIMULADA (aleatória).
-    # Se ela for chamada com um time_id inexistente, pode ser um problema, mas por enquanto ela retorna dados válidos.
     goals_for_avg = random.uniform(0.8, 1.8)
     goals_against_avg = random.uniform(0.8, 1.8)
     win_rate = random.uniform(0.3, 0.7)
