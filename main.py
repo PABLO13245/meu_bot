@@ -1,4 +1,3 @@
-# main.py
 import os
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -20,16 +19,15 @@ CHAT_ID = os.getenv("CHAT_ID")                # chat id (string)
 TZ = pytz.timezone("America/Sao_Paulo")
 bot = Bot(token=TELEGRAM_TOKEN)
 
-# Quantidade de partidas por envio (você pediu 7)
+# Quantidade de partidas por envio
 TOP_QTY = 7
 
-# CORREÇÃO 1: Alterada para função assíncrona para poder usar 'await' em compute_team_metrics
-async def build_message(fixtures, api_token, qty=7):
+async def build_message(fixtures, api_token, qty=TOP_QTY):
     now = datetime.now(TZ)
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades (48h) 🔥\n\n"
+        f"🔥 Top {qty} Oportunidades (7 Dias) 🔥\n\n" # Atualizado para 7 dias
     )
     lines = [header]
 
@@ -47,7 +45,7 @@ async def build_message(fixtures, api_token, qty=7):
         away_id = participants[1].get("id")
         kickoff_local = kickoff_time_local(f, TZ)
 
-        # CORREÇÃO 2: Adicionado 'await' para chamar a corrotina
+        # CORREÇÃO: Chamada assíncrona
         hm = await compute_team_metrics(api_token, home_id, last=5)
         am = await compute_team_metrics(api_token, away_id, last=5)
 
@@ -65,31 +63,33 @@ async def build_message(fixtures, api_token, qty=7):
         count += 1
 
     if count == 0:
-        lines.append("⚠ Nenhuma partida encontrada para análise nas próximas 48h.\n")
+        lines.append("⚠ Nenhuma partida encontrada para análise nas próximas 7 dias.\n")
 
-    footer = "\n🔎 Obs: análise baseada em últimos 1 jogos. Use responsabilidade."
+    footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade." # Alterado para 5 jogos
     lines.append(footer)
     # return single string (Markdown)
     return "\n".join(lines)
 
 async def run_analysis_send(qtd=TOP_QTY):
-    # build date range: next 48h (SportMonks accepts YYYY-MM-DD for between)
+    # build date range: next 7 days (SportMonks accepts YYYY-MM-DD for between)
     now = datetime.now(timezone.utc)
+    
+    # GARANTE A BUSCA POR 7 DIAS COMPLETOS
     start_str = now.strftime("%Y-%m-%d")
-    end_str = (now + timedelta(hours=168)).strftime("%Y-%m-%d")
+    end_str = (now + timedelta(days=7)).strftime("%Y-%m-%d")
 
     try:
-        # CORREÇÃO 3: Adicionado 'await' aqui. Resolve "o objeto 'corrotina' não é iterável"
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=100)
         
         if not fixtures:
-            await bot.send_message(chat_id=CHAT_ID, text="⚠ Nenhuma partida encontrada nas próximas 48h.")
+            message = f"⚠ Nenhuma partida encontrada entre {start_str} e {end_str}. Verifique seu API_TOKEN e ligas."
+            print(message)
+            await bot.send_message(chat_id=CHAT_ID, text=message)
             return
             
         # sort by starting_at
         fixtures = sorted(fixtures, key=lambda x: x.get("starting_at", ""))
         
-        # CORREÇÃO 4: Chamada síncrona removida, agora é uma chamada assíncrona direta
         message = await build_message(fixtures, API_TOKEN, qtd)
         
         await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
