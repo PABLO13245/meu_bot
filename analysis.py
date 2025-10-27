@@ -11,30 +11,38 @@ TZ = pytz.timezone("America/Sao_Paulo")
 # CRÍTICA: IDs de estado para jogos futuros: 1 (Aguardando) e 3 (Agendado).
 STATE_FUTURE_IDS = "1,3"
 
+# IDs das ligas consideradas "confiáveis" para análise.
+# ESTES SÃO EXEMPLOS: SUBSTITUA PELOS SEUS IDs REAIS DA SPORTMONKS!
+# Exemplo: Premier League (8), La Liga (5), Série A Brasil (463)
+TRUSTED_LEAGUE_IDS = [8, 5, 463, 3, 13]
+
 
 # ===================================
 # BUSCAR PARTIDAS FUTURAS
 # ===================================
-async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=500, league_ids=None):
+async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=500):
+    # Converte a lista de IDs para uma string separada por vírgulas para a URL
+    league_ids_str = ",".join(map(str, TRUSTED_LEAGUE_IDS))
+
     # Formato do filtro de datas no V3: filters=dates:YYYY-MM-DD,YYYY-MM-DD
     dates_filter = f"{start_str},{end_str}"
     
-    # Juntando os filtros de datas e estado no formato V3 (separados por ponto-e-vírgula)
-    main_filters = f"dates:{dates_filter};fixtureStates:{STATE_FUTURE_IDS}"
+    # Juntando os filtros de datas, estado E LIGAS no formato V3
+    main_filters = (
+        f"dates:{dates_filter};"
+        f"fixtureStates:{STATE_FUTURE_IDS};"
+        f"leagueIds:{league_ids_str}" # NOVO FILTRO DE LIGAS
+    )
 
     url = (
         f"{BASE_URL}/fixtures"
         f"?api_token={api_token}"
         f"&include=participants;league;season"
-        f"&filters={main_filters}"  # Sintaxe correta V3 para datas e estado
+        f"&filters={main_filters}"  # Sintaxe correta V3 com todos os filtros
         f"&per_page={per_page}"
     )
 
-    # Adiciona o filtro de ligas (se passado)
-    if league_ids:
-        url += f"&filter[league_id]={league_ids}" 
-
-    print(f"DEBUG: Buscando jogos de {start_str} a {end_str}")
+    print(f"DEBUG: Buscando jogos de {start_str} a {end_str} nas Ligas: {league_ids_str}")
     # Omitindo token no log por segurança
     print(f"DEBUG: URL de Requisição: {url.split('api_token=')[0]}... (token omitido) - TESTE ESTA URL NO NAVEGADOR!") 
 
@@ -68,7 +76,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=500, l
                         print(f"Erro de parsing de data para fixture {f.get('id')}: {parse_e}")
                         continue
 
-                print(f"✅ Jogos futuros encontrados: {len(upcoming)}")
+                print(f"✅ Jogos futuros encontrados (Ligas Filtradas): {len(upcoming)}")
                 return upcoming
 
     except Exception as e:
@@ -84,11 +92,13 @@ async def compute_team_metrics(api_token, team_id, last=2):
     goals_for_avg = random.uniform(0.8, 1.8)
     goals_against_avg = random.uniform(0.8, 1.8)
     win_rate = random.uniform(0.3, 0.7)
+    # GERA UMA CONFIANÇA ALEATÓRIA para que a ordenação TOP 7 funcione corretamente.
+    confidence = int(random.uniform(70, 95)) 
     return {
         "avg_goals_for": goals_for_avg,
         "avg_goals_against": goals_against_avg,
         "win_rate": win_rate,
-        "confidence": 87
+        "confidence": confidence
     }
 
 
@@ -111,8 +121,11 @@ def decide_best_market(home_metrics, away_metrics):
         suggestion = "Vitória do Visitante"
     else:
         suggestion = "Sem sinal forte — evite aposta"
+    
+    # Retorna a confiança calculada na simulação
+    confidence = home_metrics.get("confidence", 87)
 
-    return suggestion, 87
+    return suggestion, confidence
 
 
 # ===================================
@@ -126,13 +139,11 @@ def kickoff_time_local(fixture, tz=TZ):
 
         # Se for um jogo que não é hoje, retorna a data e hora
         if dt_local.date() != now_local.date():
-            # A mensagem deve ser apenas a hora, pois sabemos que é hoje.
-            return dt_local.strftime("%H:%M — %d/%m") # mantendo o formato caso algo passe
+            return dt_local.strftime("%H:%M — %d/%m") 
 
         # Se for um jogo de hoje, retorna apenas a hora
         return dt_local.strftime("%H:%M") 
 
-    # CORREÇÃO DE SINTAXE: O bloco 'try' exige um 'except' ou 'finally'
     except Exception as e:
         print(f"❌ Erro ao processar data/hora: {e}")
-        return "Horário N/D" # Retorno de fallback para evitar erro
+        return "Horário N/D"
