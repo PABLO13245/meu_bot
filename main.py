@@ -27,7 +27,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades (7 Dias) 🔥\n\n" 
+        f"🔥 Top {qty} Oportunidades (48 horas) 🔥\n\n" 
     )
     lines = [header]
 
@@ -63,7 +63,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         count += 1
 
     if count == 0:
-        lines.append("⚠ Nenhuma partida encontrada para análise nos próximos 7 dias.\n")
+        lines.append("⚠ Nenhuma partida encontrada para análise nos próximos 2 dias.\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
@@ -71,12 +71,12 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
     return "\n".join(lines)
 
 async def run_analysis_send(qtd=TOP_QTY):
-    # build date range: next 7 days (SportMonks accepts YYYY-MM-DD for between)
+    # build date range: next 2 days (SportMonks accepts YYYY-MM-DD for between)
     now = datetime.now(timezone.utc)
     
     # GARANTE A BUSCA POR 7 DIAS COMPLETOS
     start_str = now.strftime("%Y-%m-%d")
-    end_str = (now + timedelta(days=7)).strftime("%Y-%m-%d")
+    end_str = (now + timedelta(days=2)).strftime("%Y-%m-%d")
 
     try:
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=100)
