@@ -76,7 +76,7 @@ async def run_analysis_send(qtd=TOP_QTY):
     # build date range: next 48h (SportMonks accepts YYYY-MM-DD for between)
     now = datetime.now(timezone.utc)
     start_str = now.strftime("%Y-%m-%d")
-    end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%d")
+    end_str = (now + timedelta(hours=168)).strftime("%Y-%m-%d")
 
     try:
         # CORREÇÃO 3: Adicionado 'await' aqui. Resolve "o objeto 'corrotina' não é iterável"
