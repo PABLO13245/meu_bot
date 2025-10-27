@@ -7,6 +7,9 @@ import random
 BASE_URL = "https://api.sportmonks.com/v3/football"
 TZ = pytz.timezone("America/Sao_Paulo")
 
+# O ID para o estado "Scheduled" (Agendado) no SportMonks V3 é 3
+STATE_SCHEDULED_ID = 3
+
 
 # ===================================
 # BUSCAR PARTIDAS FUTURAS (CORRIGIDO V3)
@@ -14,18 +17,23 @@ TZ = pytz.timezone("America/Sao_Paulo")
 async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, league_ids=None):
     # Formato do filtro de datas no V3: filters=dates:YYYY-MM-DD,YYYY-MM-DD
     dates_filter = f"{start_str},{end_str}"
+    
+    # CORREÇÃO FINAL: Juntando os filtros de datas e estado no formato V3, separados por ponto-e-vírgula (;)
+    main_filters = f"dates:{dates_filter};fixtureStates:{STATE_SCHEDULED_ID}"
 
     url = (
         f"{BASE_URL}/fixtures"
         f"?api_token={api_token}"
         f"&include=participants;league;season"
-        f"&filters=dates:{dates_filter}"  # <--- CORREÇÃO APLICADA: 'dates' no lugar de 'datas'
-        f"&filter[state]=scheduled"
+        f"&filters={main_filters}"  # <-- AGORA USANDO FILTROS DE DATAS E ESTADO CORRETOS
+        # REMOVIDO: f"&filter[state]=scheduled" <-- ESTE ERA O PROBLEMA ANTERIOR
         f"&per_page={per_page}"
     )
 
     # Adiciona o filtro de ligas (se passado)
     if league_ids:
+        # Nota: Idealmente, league_ids também seria adicionado ao parâmetro 'filters' usando a sintaxe de filtro V3,
+        # mas mantendo esta sintaxe de 'filter[]' como um fallback que pode funcionar para ligas.
         url += f"&filter[league_id]={league_ids}"
 
     try:
@@ -59,7 +67,6 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
 # ===================================
 # MÉTRICAS SIMULADAS (Aleatórias)
 # ===================================
-# Mantida como async def para compatibilidade com o main.py (agora assíncrono)
 async def compute_team_metrics(api_token, team_id, last=2):
     goals_for_avg = random.uniform(0.8, 1.8)
     goals_against_avg = random.uniform(0.8, 1.8)
@@ -68,7 +75,7 @@ async def compute_team_metrics(api_token, team_id, last=2):
         "avg_goals_for": goals_for_avg,
         "avg_goals_against": goals_against_avg,
         "win_rate": win_rate,
-        "confidence": 87  # fixo, como solicitado
+        "confidence": 87
     }
 
 
