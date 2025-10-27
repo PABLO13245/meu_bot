@@ -12,9 +12,17 @@ TZ = pytz.timezone("America/Sao_Paulo")
 STATE_FUTURE_IDS = "1,3"
 
 # IDs das ligas consideradas "confiáveis" para análise.
-# ESTES SÃO EXEMPLOS: SUBSTITUA PELOS SEUS IDs REAIS DA SPORTMONKS!
-# Exemplo: Premier League (8), La Liga (5), Série A Brasil (463)
-TRUSTED_LEAGUE_IDS = [8, 5, 463, 3, 13]
+# (Ligas Tier 1: Maior estabilidade, liquidez e cobertura de dados)
+TRUSTED_LEAGUE_IDS = [
+    8,    # Premier League (Inglaterra)
+    5,    # La Liga (Espanha)
+    13,   # Série A (Itália)
+    3,    # Bundesliga (Alemanha)
+    17,   # Ligue 1 (França)
+    463,  # Brasileirão Série A (Brasil)
+    2,    # Champions League (Europa)
+    141   # MLS (EUA)
+]
 
 
 # ===================================
