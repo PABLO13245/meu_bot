@@ -64,8 +64,9 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=500):
                 data = (await response.json()).get("data", [])
                 upcoming = []
                 # Define o dia de hoje (em UTC) para checagem manual
-                today_utc = datetime.now(timezone.utc).date()
-                # Adiciona 1 minuto de margem para evitar descarte por milissegundos
+                # NOTE: A verificação de data é importante aqui porque o main.py
+                # está buscando 7 dias para testar, mas queremos garantir que
+                # o filtro manual de hora (agora) funcione em todos eles.
                 now_utc_plus_margin = datetime.now(timezone.utc) + timedelta(minutes=1) 
 
                 for f in data:
@@ -73,11 +74,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=500):
                         # O campo starting_at da API está em UTC, mas sem tzinfo
                         dt = datetime.strptime(f["starting_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
                         
-                        # FILTRO CRÍTICO 1: Garante que o jogo seja no dia de hoje (UTC)
-                        if dt.date() != today_utc:
-                            continue # Pula jogos que não são de hoje
-
-                        # FILTRO CRÍTICO 2: Garante que o jogo ainda não tenha começado
+                        # FILTRO CRÍTICO: Garante que o jogo ainda não tenha começado
                         if dt > now_utc_plus_margin:
                             upcoming.append(f)
                     except Exception as parse_e:
@@ -146,7 +143,8 @@ def kickoff_time_local(fixture, tz=TZ):
         now_local = datetime.now(tz)
 
         # Se for um jogo que não é hoje, retorna a data e hora
-        if dt_local.date() != now_local.date():
+        # NOTA: Usamos a data da partida para exibir a data se o range for de 7 dias
+        if (dt_local.date() - now_local.date()).days != 0:
             return dt_local.strftime("%H:%M — %d/%m") 
 
         # Se for um jogo de hoje, retorna apenas a hora
