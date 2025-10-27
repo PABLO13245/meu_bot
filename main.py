@@ -143,7 +143,7 @@ async def main():
     while True:
         await asyncio.sleep(60)
 
-if__name__ == "__main__":
+if __name__ == "__main__":
     # quick check for env variables
     missing = []
     if not API_TOKEN:
@@ -162,4 +162,3 @@ if__name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Bot interrompido manualmente.")
-    
