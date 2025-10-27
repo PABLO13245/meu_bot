@@ -5,15 +5,12 @@ import pytz
 
 # Configurações Base
 BASE_URL = "https://api.sportmonks.com/v3/football"
-STATE_FUTURE_IDS = "1,3" # 1=Awaiting, 3=Scheduled (para planos que não veem apenas o 3)
-# IDs de Ligas Tier 1 para filtrar (A SportMonks V3 tem IDs diferentes)
-TRUSTED_LEAGUE_IDS = "8,5,13,3,17,463,2,141" # Ex: Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Brasileirão A, Champions, MLS
+STATE_FUTURE_IDS = "1,3" # 1=Awaiting, 3=Scheduled 
+# Removido o filtro de ligas confiáveis (TRUSTED_LEAGUE_IDS). O bot buscará TODAS as ligas.
 
-# Mapeamento manual para corrigir ligas onde o código do país está ausente
+# Mapeamento manual para corrigir ligas onde o código do país está ausente (Ex: Suécia)
 MANUAL_COUNTRY_MAP = {
-    # Exemplo: Allsvenskan (Suécia)
     "Allsvenskan": "SE", 
-    # Adicione outras ligas conforme necessário se aparecerem com '🇽🇽'
 }
 
 # Mapeamento de Países para Bandeiras (Emojis)
@@ -31,11 +28,10 @@ def get_flag_emoji(country_code):
 # ----------------------------------------------------------------------
 
 async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
-    """Busca jogos futuros na API da SportMonks, filtrando por data e ligas."""
+    """Busca jogos futuros na API da SportMonks, filtrando apenas por data e estado (TODAS AS LIGAS)."""
     
-    # Filtro de data, estado e ligas
-    # Incluindo 'participants.country' e 'league.country' para tentar buscar as bandeiras
-    main_filters = f"dates:{start_date};fixtureStates:{STATE_FUTURE_IDS};leagueIds:{TRUSTED_LEAGUE_IDS}"
+    # Filtro de data e estado (AGORA SEM O FILTRO DE LEAGUE IDS)
+    main_filters = f"dates:{start_date};fixtureStates:{STATE_FUTURE_IDS}"
     
     url = (
         f"{BASE_URL}/fixtures"
@@ -46,7 +42,7 @@ async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
     )
     
     # DEBUG: URL de Requisição (token omitido por segurança)
-    print(f"DEBUG: Buscando jogos de {start_date} nas Ligas Filtradas.")
+    print(f"DEBUG: Buscando jogos de {start_date} em TODAS as ligas.")
     print(f"DEBUG: URL de Requisição: {url.split('api_token=')[0]}... (token omitido) - TESTE ESTA URL NO NAVEGADOR!")
     
     try:
@@ -73,7 +69,7 @@ async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
                             if 'country' not in p or not p['country'].get('code'):
                                 p['country'] = {'code': country_code}
 
-                print(f"✅ Jogos futuros encontrados (Ligas Filtradas): {len(fixtures)}")
+                print(f"✅ Jogos futuros encontrados (Todas as Ligas): {len(fixtures)}")
                 return fixtures
                 
     except Exception as e:
