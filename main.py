@@ -19,41 +19,61 @@ CHAT_ID = os.getenv("CHAT_ID")                # chat id (string)
 TZ = pytz.timezone("America/Sao_Paulo")
 bot = Bot(token=TELEGRAM_TOKEN)
 
-# Quantidade de partidas por envio. Pode ser um número alto para pegar todas do dia.
-TOP_QTY = 999 
+# CRÍTICO: Quantidade de partidas por envio, voltando para 7
+TOP_QTY = 7 
 
 async def build_message(fixtures, api_token, qty=TOP_QTY):
     now = datetime.now(TZ)
-    header = (
-        f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS DE HOJE)\n"
-        f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"⚽ Oportunidades do Dia ({len(fixtures)} Jogos Encontrados) ⚽\n\n" 
-    )
-    lines = [header]
-
-    count = 0
-    for idx, f in enumerate(fixtures, start=1):
-        # Como o TOP_QTY é alto, ele deve incluir todas.
-        if count >= qty:
-            break
-            
+    
+    # 1. Processar e Enriquecer os dados com Sugestão e Confiança
+    enriched_fixtures = []
+    for f in fixtures:
         participants = f.get("participants", [])
         if len(participants) < 2:
             continue
             
-        home = participants[0].get("name", "Casa")
-        away = participants[1].get("name", "Fora")
-        league = f.get("league", {}).get("name", "Desconhecida")
         home_id = participants[0].get("id")
         away_id = participants[1].get("id")
-        kickoff_local = kickoff_time_local(f, TZ)
 
-        # Chamada assíncrona
+        # Chamada assíncrona para métricas
         hm = await compute_team_metrics(api_token, home_id, last=5)
         am = await compute_team_metrics(api_token, away_id, last=5)
 
-        # decide a melhor aposta (função síncrona)
+        # Decisão da aposta
         suggestion, confidence = decide_best_market(hm, am)
+        
+        # Anexa os dados de análise ao objeto da partida
+        f["suggestion"] = suggestion
+        f["confidence"] = confidence
+        
+        # Adiciona apenas se houver uma sugestão forte (confiança > 70% por exemplo)
+        if confidence > 0: # Como a confiança está fixa, todos são incluídos.
+            enriched_fixtures.append(f)
+
+    # 2. ORDENAÇÃO: Ordena pela CONFIANÇA (descrescente) e depois pela HORA (crescente)
+    # A confiança (f["confidence"]) é o critério principal
+    # A hora (f["starting_at"]) é o critério de desempate
+    enriched_fixtures.sort(key=lambda f: (f["confidence"], f["starting_at"]), reverse=True)
+
+
+    header = (
+        f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS DE HOJE)\n"
+        f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
+        f"🔥 Top {qty} Oportunidades do Dia 🔥\n\n" 
+    )
+    lines = [header]
+
+    # 3. CONSTRUÇÃO DA MENSAGEM: Itera apenas sobre os TOP N
+    count = 0
+    # Limita a iteração ao TOP_QTY
+    for idx, f in enumerate(enriched_fixtures[:qty], start=1): 
+        participants = f.get("participants", [])
+        home = participants[0].get("name", "Casa")
+        away = participants[1].get("name", "Fora")
+        league = f.get("league", {}).get("name", "Desconhecida")
+        kickoff_local = kickoff_time_local(f, TZ)
+        suggestion = f["suggestion"]
+        confidence = f["confidence"]
 
         part = (
             f"{idx}. ⚽ {home} x {away}\n"
@@ -66,7 +86,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         count += 1
 
     if count == 0:
-        lines.append("⚠ Nenhuma partida encontrada para análise hoje.\n")
+        lines.append("⚠ Nenhuma partida encontrada para análise hoje com sinal forte.\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
@@ -79,12 +99,9 @@ async def run_analysis_send(qtd=TOP_QTY):
     
     # Busca do início do dia (hoje) até o final do dia (hoje)
     start_str = now.strftime("%Y-%m-%d")
-    # Para buscar apenas o dia de hoje, envie o mesmo dia duas vezes para o filtro de datas.
     end_str = start_str 
 
     try:
-        # A API SportMonks V3 com filters=dates:YYYY-MM-DD,YYYY-MM-DD deve ser suficiente.
-        # Se persistir o erro, o problema estará no analysis.py
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=500)
         
         if not fixtures:
@@ -93,9 +110,7 @@ async def run_analysis_send(qtd=TOP_QTY):
             await bot.send_message(chat_id=CHAT_ID, text=message)
             return
             
-        # sort by starting_at (para que a ordem seja cronológica)
-        fixtures = sorted(fixtures, key=lambda x: x.get("starting_at", ""))
-        
+        # O SORTING e a LIMIÇÃO para os TOP 7 ocorrem dentro do build_message
         message = await build_message(fixtures, API_TOKEN, qtd)
         
         await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
