@@ -12,28 +12,26 @@ STATE_SCHEDULED_ID = 3
 
 
 # ===================================
-# BUSCAR PARTIDAS FUTURAS (CORRIGIDO V3)
+# BUSCAR PARTIDAS FUTURAS
 # ===================================
 async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, league_ids=None):
     # Formato do filtro de datas no V3: filters=dates:YYYY-MM-DD,YYYY-MM-DD
     dates_filter = f"{start_str},{end_str}"
     
-    # CORREÇÃO FINAL: Juntando os filtros de datas e estado no formato V3, separados por ponto-e-vírgula (;)
+    # Juntando os filtros de datas e estado no formato V3 (separados por ponto-e-vírgula)
     main_filters = f"dates:{dates_filter};fixtureStates:{STATE_SCHEDULED_ID}"
 
     url = (
         f"{BASE_URL}/fixtures"
         f"?api_token={api_token}"
         f"&include=participants;league;season"
-        f"&filters={main_filters}"  # <-- AGORA USANDO FILTROS DE DATAS E ESTADO CORRETOS
-        # REMOVIDO: f"&filter[state]=scheduled" <-- ESTE ERA O PROBLEMA ANTERIOR
+        f"&filters={main_filters}"  # <-- Sintaxe correta V3 para datas e estado
         f"&per_page={per_page}"
     )
 
     # Adiciona o filtro de ligas (se passado)
     if league_ids:
-        # Nota: Idealmente, league_ids também seria adicionado ao parâmetro 'filters' usando a sintaxe de filtro V3,
-        # mas mantendo esta sintaxe de 'filter[]' como um fallback que pode funcionar para ligas.
+        # Mantendo o formato original que usa filter[] para ligas
         url += f"&filter[league_id]={league_ids}"
 
     try:
@@ -51,6 +49,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
                 for f in data:
                     try:
                         dt = datetime.strptime(f["starting_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                        # Seu main.py já faz a verificação de data, mas mantemos o filtro de jogos futuros
                         if dt > now_utc:
                             upcoming.append(f)
                     except Exception:
@@ -68,6 +67,8 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
 # MÉTRICAS SIMULADAS (Aleatórias)
 # ===================================
 async def compute_team_metrics(api_token, team_id, last=2):
+    # NOTA: Esta função continua SIMULADA (aleatória).
+    # Ela precisa ser implementada com chamadas de API reais para obter dados históricos.
     goals_for_avg = random.uniform(0.8, 1.8)
     goals_against_avg = random.uniform(0.8, 1.8)
     win_rate = random.uniform(0.3, 0.7)
@@ -113,6 +114,3 @@ def kickoff_time_local(fixture, tz=TZ):
 
         if dt_local.date() != now_local.date():
             return dt_local.strftime("%H:%M — %d/%m")
-        return dt_local.strftime("%H:%M")
-    except Exception:
-        return "Horário indefinido"
