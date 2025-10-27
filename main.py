@@ -46,8 +46,8 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         f["suggestion"] = suggestion
         f["confidence"] = confidence
         
-        # Adiciona apenas se houver uma sugestão forte (confiança > 70% por exemplo)
-        if confidence > 0: # Como a confiança está fixa, todos são incluídos.
+        # Adiciona apenas se a confiança for alta (ajuste o valor se quiser mais rigor)
+        if confidence > 0: 
             enriched_fixtures.append(f)
 
     # 2. ORDENAÇÃO: Ordena pela CONFIANÇA (descrescente) e depois pela HORA (crescente)
@@ -75,6 +75,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         suggestion = f["suggestion"]
         confidence = f["confidence"]
 
+        # EXIBIÇÃO DA LIGA: Já estava no formato
         part = (
             f"{idx}. ⚽ {home} x {away}\n"
             f"🏆 {league}  •  🕒 {kickoff_local}\n"
@@ -86,7 +87,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         count += 1
 
     if count == 0:
-        lines.append("⚠ Nenhuma partida encontrada para análise hoje com sinal forte.\n")
+        lines.append("⚠ Nenhuma partida encontrada para análise hoje com sinal forte nas ligas filtradas.\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
@@ -105,7 +106,7 @@ async def run_analysis_send(qtd=TOP_QTY):
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=500)
         
         if not fixtures:
-            message = f"⚠ Nenhuma partida agendada para hoje ({start_str}). Verifique seu API_TOKEN e ligas."
+            message = f"⚠ Nenhuma partida agendada para hoje ({start_str}) nas ligas filtradas. Verifique seu API_TOKEN e ligas."
             print(message)
             await bot.send_message(chat_id=CHAT_ID, text=message)
             return
@@ -142,7 +143,7 @@ async def main():
     while True:
         await asyncio.sleep(60)
 
-if __name__ == "__main__":
+if__name__ == "__main__":
     # quick check for env variables
     missing = []
     if not API_TOKEN:
@@ -161,3 +162,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Bot interrompido manualmente.")
+    
