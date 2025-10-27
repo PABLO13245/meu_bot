@@ -8,8 +8,7 @@ import os
 BASE_URL = "https://api.sportmonks.com/v3/football"
 TZ = pytz.timezone("America/Sao_Paulo")
 
-# CORREÇÃO CRÍTICA: Os IDs de estado para jogos futuros são 1 (Aguardando) e 3 (Agendado).
-# Usaremos ambos para garantir que a API retorne o máximo de jogos possíveis.
+# CRÍTICA: IDs de estado para jogos futuros: 1 (Aguardando) e 3 (Agendado).
 STATE_FUTURE_IDS = "1,3"
 
 
@@ -21,7 +20,6 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
     dates_filter = f"{start_str},{end_str}"
     
     # Juntando os filtros de datas e estado no formato V3 (separados por ponto-e-vírgula)
-    # Agora usa STATE_FUTURE_IDS que inclui 1 e 3
     main_filters = f"dates:{dates_filter};fixtureStates:{STATE_FUTURE_IDS}"
 
     url = (
