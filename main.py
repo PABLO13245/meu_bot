@@ -41,7 +41,6 @@ async def build_message(fixtures, api_token, qty=7):
         away_id = participants[1].get("id")
 
         # Chama a corrotina (necessita 'await')
-        # CORREÇÃO: Ajuste para última partida (last=1) para simulação mais rápida
         hm = await compute_team_metrics(api_token, home_id, last=5) 
         am = await compute_team_metrics(api_token, away_id, last=5)
 
@@ -127,6 +126,7 @@ async def run_analysis_send(qtd=TOP_QTY):
 
     try:
         # Busca fixtures de HOJE
+        # A função fetch_upcoming_fixtures agora busca TODAS as ligas
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, per_page=100)
         
         # Filtro 1: Garante que é HOJE e está no fuso horário correto
