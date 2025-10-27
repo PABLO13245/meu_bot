@@ -57,9 +57,9 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
 
 
     header = (
-        f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS DE HOJE)\n"
+        f"📅 Análises — {now.strftime('%d/%m/%Y')} (PRÓXIMOS 7 DIAS - TESTE)\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades do Dia 🔥\n\n" 
+        f"🔥 Top {qty} Oportunidades Encontradas 🔥\n\n" 
     )
     lines = [header]
 
@@ -87,7 +87,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         count += 1
 
     if count == 0:
-        lines.append("⚠ Nenhuma partida encontrada para análise hoje com sinal forte nas ligas filtradas.\n")
+        lines.append("⚠ Nenhuma partida encontrada para análise com sinal forte nas ligas filtradas.\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
@@ -95,18 +95,18 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
     return "\n".join(lines)
 
 async def run_analysis_send(qtd=TOP_QTY):
-    # CRÍTICO: build date range: Apenas hoje (0 dias)
+    # CRÍTICO: build date range: Próximos 7 dias para TESTE
     now = datetime.now(timezone.utc)
     
-    # Busca do início do dia (hoje) até o final do dia (hoje)
+    # Busca do início do dia (hoje) até 7 dias a partir de hoje
     start_str = now.strftime("%Y-%m-%d")
-    end_str = start_str 
+    end_str = (now + timedelta(days=7)).strftime("%Y-%m-%d") 
 
     try:
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=500)
         
         if not fixtures:
-            message = f"⚠ Nenhuma partida agendada para hoje ({start_str}) nas ligas filtradas. Verifique seu API_TOKEN e ligas."
+            message = f"⚠ Nenhuma partida agendada entre {start_str} e {end_str} nas ligas filtradas. Verifique seu API_TOKEN e ligas."
             print(message)
             await bot.send_message(chat_id=CHAT_ID, text=message)
             return
