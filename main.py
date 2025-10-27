@@ -27,7 +27,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades (7 Dias) 🔥\n\n" # Atualizado para 7 dias
+        f"🔥 Top {qty} Oportunidades (7 Dias) 🔥\n\n" # Mensagem clara de 7 dias
     )
     lines = [header]
 
@@ -45,7 +45,7 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         away_id = participants[1].get("id")
         kickoff_local = kickoff_time_local(f, TZ)
 
-        # CORREÇÃO: Chamada assíncrona
+        # Chamada assíncrona
         hm = await compute_team_metrics(api_token, home_id, last=5)
         am = await compute_team_metrics(api_token, away_id, last=5)
 
@@ -63,9 +63,9 @@ async def build_message(fixtures, api_token, qty=TOP_QTY):
         count += 1
 
     if count == 0:
-        lines.append("⚠ Nenhuma partida encontrada para análise nas próximas 7 dias.\n")
+        lines.append("⚠ Nenhuma partida encontrada para análise nos próximos 7 dias.\n")
 
-    footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade." # Alterado para 5 jogos
+    footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
     # return single string (Markdown)
     return "\n".join(lines)
