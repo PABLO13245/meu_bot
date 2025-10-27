@@ -1,5 +1,5 @@
 import aiohttp
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta # Adicionado timedelta, caso necessário em outras funções
 import pytz
 import random
 
@@ -18,7 +18,7 @@ async def fetch_upcoming_fixtures(api_token, start_str, end_str, per_page=100, l
     # Formato do filtro de datas no V3: filters=dates:YYYY-MM-DD,YYYY-MM-DD
     dates_filter = f"{start_str},{end_str}"
     
-    # Juntando os filtros de datas e estado no formato V3 (separados por ponto-e-vírgula)
+    # Juntando os filtros de datas e estado no formato V3 (separados por ponto-e-vífen)
     main_filters = f"dates:{dates_filter};fixtureStates:{STATE_SCHEDULED_ID}"
 
     url = (
@@ -112,5 +112,14 @@ def kickoff_time_local(fixture, tz=TZ):
         dt_local = dt.astimezone(tz)
         now_local = datetime.now(tz)
 
+        # Se for um jogo que não é hoje, retorna a data e hora
         if dt_local.date() != now_local.date():
             return dt_local.strftime("%H:%M — %d/%m")
+        
+        # Se for um jogo de hoje, retorna apenas a hora
+        return dt_local.strftime("%H:%M") # <--- Linha de retorno para jogos de HOJE
+
+    # 👇 CORREÇÃO AQUI! O bloco 'try' exige um 'except' ou 'finally' 👇
+    except Exception as e:
+        print(f"❌ Erro ao processar data/hora: {e}")
+        return "Horário N/D" # Retorno de fallback para evitar erro
