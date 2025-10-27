@@ -113,7 +113,7 @@ async def main():
     while True:
         await asyncio.sleep(60)
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     # quick check for env variables
     missing = []
     if not API_TOKEN:
