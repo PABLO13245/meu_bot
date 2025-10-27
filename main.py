@@ -79,10 +79,12 @@ async def run_analysis_send(qtd=TOP_QTY):
     
     # Busca do início do dia (hoje) até o final do dia (hoje)
     start_str = now.strftime("%Y-%m-%d")
-    # Para buscar apenas o dia de hoje, o end_str deve ser o mesmo que o start_str.
+    # Para buscar apenas o dia de hoje, envie o mesmo dia duas vezes para o filtro de datas.
     end_str = start_str 
 
     try:
+        # A API SportMonks V3 com filters=dates:YYYY-MM-DD,YYYY-MM-DD deve ser suficiente.
+        # Se persistir o erro, o problema estará no analysis.py
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=500)
         
         if not fixtures:
