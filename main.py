@@ -23,7 +23,8 @@ bot = Bot(token=TELEGRAM_TOKEN)
 # Quantidade de partidas por envio (você pediu 7)
 TOP_QTY = 7
 
-def build_message(fixtures, api_token, qty=7):
+# CORREÇÃO 1: Alterada para função assíncrona para poder usar 'await' em compute_team_metrics
+async def build_message(fixtures, api_token, qty=7):
     now = datetime.now(TZ)
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')}\n"
@@ -46,11 +47,11 @@ def build_message(fixtures, api_token, qty=7):
         away_id = participants[1].get("id")
         kickoff_local = kickoff_time_local(f, TZ)
 
-        # calcula métricas
-        hm = compute_team_metrics(api_token, home_id, last=5)
-        am = compute_team_metrics(api_token, away_id, last=5)
+        # CORREÇÃO 2: Adicionado 'await' para chamar a corrotina
+        hm = await compute_team_metrics(api_token, home_id, last=5)
+        am = await compute_team_metrics(api_token, away_id, last=5)
 
-        # decide a melhor aposta
+        # decide a melhor aposta (função síncrona)
         suggestion, confidence = decide_best_market(hm, am)
 
         part = (
@@ -78,14 +79,21 @@ async def run_analysis_send(qtd=TOP_QTY):
     end_str = (now + timedelta(hours=48)).strftime("%Y-%m-%d")
 
     try:
-        fixtures = fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=100)
+        # CORREÇÃO 3: Adicionado 'await' aqui. Resolve "o objeto 'corrotina' não é iterável"
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, end_str, per_page=100)
+        
         if not fixtures:
             await bot.send_message(chat_id=CHAT_ID, text="⚠ Nenhuma partida encontrada nas próximas 48h.")
             return
+            
         # sort by starting_at
         fixtures = sorted(fixtures, key=lambda x: x.get("starting_at", ""))
-        message = await asyncio.to_thread(build_message, fixtures, API_TOKEN, qtd)
+        
+        # CORREÇÃO 4: Chamada síncrona removida, agora é uma chamada assíncrona direta
+        message = await build_message(fixtures, API_TOKEN, qtd)
+        
         await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
+        
     except Exception as e:
         # log and send minimal error
         print("Erro run_analysis_send:", e)
