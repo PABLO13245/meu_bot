@@ -82,7 +82,7 @@ async def build_message(fixtures, api_token, qty=7):
         league_data = f.get("league", {})
         league_name = league_data.get("name", "Desconhecida")
         
-        # CORREÇÃO: Usando country_code para o país da liga
+        # O código de bandeira é injetado no analysis.py agora.
         league_country_code = league_data.get("country", {}).get("code", "xx")
         league_flag = get_flag_emoji(league_country_code)
 
@@ -108,7 +108,7 @@ async def build_message(fixtures, api_token, qty=7):
         count += 1
 
     if count == 0:
-        lines.append("⚠ Nenhuma partida TOP 7 encontrada para hoje nas ligas selecionadas.\n")
+        lines.append("⚠ Nenhuma partida TOP 7 encontrada para hoje nas ligas selecionadas (e que ainda não começou).\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos. Use responsabilidade."
     lines.append(footer)
@@ -118,31 +118,45 @@ async def build_message(fixtures, api_token, qty=7):
 
 async def run_analysis_send(qtd=TOP_QTY):
     # build date range: APENAS HOJE
-    now = datetime.now(timezone.utc)
-    # Start e End são a mesma data para filtrar apenas hoje
-    start_str = now.strftime("%Y-%m-%d")
+    now_utc = datetime.now(timezone.utc)
+    # Start é a data de hoje
+    start_str = now_utc.strftime("%Y-%m-%d")
     
     # Flag para debug
     print(f"DEBUG: Buscando jogos de {start_str} nas Ligas Filtradas.")
 
     try:
-        # CORREÇÃO: Passando apenas a data de início (start_str)
+        # Busca fixtures de HOJE
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, per_page=100)
         
-        # Filtro final para garantir que apenas jogos de HOJE passem
-        now_local = datetime.now(TZ).date()
+        # Filtro 1: Garante que é HOJE e está no fuso horário correto
+        now_local = datetime.now(TZ)
         
         filtered_fixtures = [
             f for f in fixtures 
-            if kickoff_time_local(f, TZ, return_datetime=True).date() == now_local
+            if kickoff_time_local(f, TZ, return_datetime=True).date() == now_local.date()
         ]
-        
-        if not filtered_fixtures:
-            await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para hoje ({now_local.strftime('%d/%m')}) nas ligas filtradas.")
+
+        # Filtro 2 (CRUCIAL): Remove jogos que JÁ COMEÇARAM ou TERMINARAM
+        # Usamos uma margem de segurança de 5 minutos (300 segundos) para evitar jogos "em cima da hora"
+        time_threshold = now_local + timedelta(minutes=5)
+
+        upcoming_fixtures = []
+        for f in filtered_fixtures:
+            kickoff_dt = kickoff_time_local(f, TZ, return_datetime=True)
+            # Apenas jogos que começam > 5 minutos a partir de agora
+            if kickoff_dt > time_threshold:
+                 upcoming_fixtures.append(f)
+            else:
+                print(f"DEBUG: Jogo ignorado (já começou ou muito próximo): {f.get('league', {}).get('name')} - {f.get('participants', [{}])[0].get('name')} x {f.get('participants', [{},{}])[1].get('name')} ({kickoff_dt.strftime('%H:%M')})")
+
+
+        if not upcoming_fixtures:
+            await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para hoje ({now_local.strftime('%d/%m')}) nas ligas filtradas, com início a partir das {time_threshold.strftime('%H:%M')} (BRT).")
             return
             
         # Chamada assíncrona para build_message, que agora faz a análise e ordenação
-        message = await build_message(filtered_fixtures, API_TOKEN, qtd)
+        message = await build_message(upcoming_fixtures, API_TOKEN, qtd)
         
         await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
         
