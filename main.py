@@ -1,4 +1,3 @@
-# Importações necessárias para operações assíncronas e análise
 import os
 import asyncio
 from datetime import datetime, timedelta
@@ -7,7 +6,6 @@ from telegram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Importa TODAS as funções do analysis.py (API, análise e utilidades)
-# As funções foram reescritas para football-data.org, mas o main.py usa os mesmos nomes.
 from analysis import (
     fetch_upcoming_fixtures,
     compute_team_metrics,
@@ -38,7 +36,7 @@ MINUTES_BEFORE_KICKOFF = 2
 # FUNÇÕES DE ANÁLISE E MENSAGEM
 # ----------------------------------------------------------------------
 
-async def build_message(fixtures, api_token, qty=7):
+async def build_message(fixtures, api_token, qtd=7):
     """Analisa as fixtures, ordena pela confiança e constrói a mensagem final."""
     
     # 1. Analisa todos os jogos em paralelo
@@ -99,14 +97,14 @@ async def build_message(fixtures, api_token, qty=7):
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS NAS PRÓXIMAS 48H)\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades (Sinais > {MIN_CONFIDENCE}%) 🔥\n\n"
+        f"🔥 Top {qtd} Oportunidades (Sinais > {MIN_CONFIDENCE}%) 🔥\n\n"
     )
     lines = [header]
 
     count = 0
     
     for f in analyzed_fixtures:
-        if count >= qty:
+        if count >= qtd:
             break
             
         participants = f.get("participants", [])
@@ -123,6 +121,7 @@ async def build_message(fixtures, api_token, qty=7):
         kickoff_local = kickoff_time_local(f, TZ)
         
         # Emojis e nomes
+        # Ambos os emojis (time e liga) usarão a função corrigida em analysis.py
         league_flag = get_flag_emoji(league_country_code)
         # Os participantes também devem ter o country code mapeado
         home_flag = get_flag_emoji(home.get("country", {}).get("code", "xx"))
@@ -145,7 +144,7 @@ async def build_message(fixtures, api_token, qty=7):
         count += 1
 
     if count == 0:
-        lines.append(f"⚠ Nenhuma partida TOP {qty} encontrada para as próximas 48h, com confiança acima de {MIN_CONFIDENCE}%.\n")
+        lines.append(f"⚠ Nenhuma partida TOP {qtd} encontrada para as próximas 48h, com confiança acima de {MIN_CONFIDENCE}%.\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos e responsabilidade."
     lines.append(footer)
@@ -247,7 +246,7 @@ def start_scheduler():
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0) # Noite
     
     scheduler.start()
-    print("✅ Agendador iniciado para 00:00, 06:00, 16:00, e 19:00 (BRT).")
+    print("✅ Agendador iniciado para 06:00, 12:00, e 19:00 (BRT).")
 
 async def main():
     """Função principal que mantém o bot rodando."""
