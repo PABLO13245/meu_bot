@@ -120,12 +120,8 @@ async def build_message(fixtures, api_token, qtd=7):
         
         kickoff_local = kickoff_time_local(f, TZ)
         
-        # Emojis e nomes
-        # Ambos os emojis (time e liga) usarão a função corrigida em analysis.py
+        # Emoji da bandeira da liga (País)
         league_flag = get_flag_emoji(league_country_code)
-        # Os participantes também devem ter o country code mapeado
-        home_flag = get_flag_emoji(home.get("country", {}).get("code", "xx"))
-        away_flag = get_flag_emoji(away.get("country", {}).get("code", "xx"))
         
         home_name = home.get("name", "Casa")
         away_name = away.get("name", "Fora")
@@ -133,8 +129,9 @@ async def build_message(fixtures, api_token, qtd=7):
         suggestion = f.get('suggestion', 'N/A')
         confidence = f.get('confidence', 0)
 
+        # LINHA ATUALIZADA: Remoção das bandeiras dos times (home_flag e away_flag)
         part = (
-            f"{count + 1}. ⚽ {home_flag} {home_name} x {away_name} {away_flag}\n"
+            f"{count + 1}. ⚽ {home_name} x {away_name}\n"
             f"🏆 {league_flag} {league_name}  •  🕒 {kickoff_local}\n"
             f"🎯 Sugestão principal: {suggestion}\n"
             f"💹 Confiança: {confidence}%\n"
@@ -246,7 +243,7 @@ def start_scheduler():
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0) # Noite
     
     scheduler.start()
-    print("✅ Agendador iniciado para 06:00, 12:00, e 19:00 (BRT).")
+    print("✅ Agendador iniciado para 00:00, 06:00, 16:00, e 19:00 (BRT).")
 
 async def main():
     """Função principal que mantém o bot rodando."""
