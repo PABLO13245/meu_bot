@@ -7,7 +7,7 @@ import random
 import os
 
 # CONFIGURAÇÃO: O script agora tentará ler o token da variável de ambiente 'SPORTMONKS_API_TOKEN'.
-ENV_TOKEN = os.environ.get('SPORTMONKS_API_TOKEN')
+ENV_TOKEN = os.environ.get('API_TOKEN')
 API_TOKEN = ENV_TOKEN if ENV_TOKEN else "YOUR_SPORTMONKS_API_TOKEN" 
 
 # Configurações Base
