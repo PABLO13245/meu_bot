@@ -25,7 +25,7 @@ bot = Bot(token=TELEGRAM_TOKEN)
 TOP_QTY = 7 # Quantidade de partidas por envio (limite de TOP Oportunidades)
 
 # Filtro mínimo de confiança (para aparecer na lista de oportunidades)
-# Reduzindo para 50% para garantir que jogos que passem no filtro de tempo sejam analisados.
+# 0% para "Sem Dados" será filtrado aqui.
 MIN_CONFIDENCE = 50 
 
 # Margem de tempo de segurança para evitar pegar jogos que já começaram ou começarão em segundos.
@@ -56,7 +56,7 @@ async def build_message(fixtures, api_token, qty=7):
                 # DEBUG: Ignorar jogos onde home/away ID não está claro
                 return None
             
-            # Análise de Métricas (Simulada)
+            # Análise de Métricas (REAL)
             hm, am = await asyncio.gather(
                 compute_team_metrics(api_token, home_id, last=5), 
                 compute_team_metrics(api_token, away_id, last=5)
@@ -67,7 +67,10 @@ async def build_message(fixtures, api_token, qty=7):
             
             # Filtro: Apenas sinais fortes (>= MIN_CONFIDENCE)
             if confidence < MIN_CONFIDENCE:
-                print(f"DEBUG: Jogo ignorado por baixa confiança ({confidence}% < {MIN_CONFIDENCE}%)")
+                log_msg = f"DEBUG: Jogo ignorado por baixa confiança ({confidence}%)"
+                if confidence == 0:
+                     log_msg += " (FALHA DE DADOS HISTÓRICOS)"
+                print(log_msg)
                 return None
             
             fixture['suggestion'] = suggestion
@@ -137,7 +140,7 @@ async def build_message(fixtures, api_token, qty=7):
     if count == 0:
         lines.append(f"⚠ Nenhuma partida TOP {qty} encontrada para as próximas 48h, com confiança acima de {MIN_CONFIDENCE}%.\n")
 
-    footer = "\n🔎 Obs: análise baseada em últimos 2 jogos (atualmente simulada). Use responsabilidade."
+    footer = "\n🔎 Obs: análise baseada em últimos 2 jogos (agora real) e responsabilidade."
     lines.append(footer)
     return "\n".join(lines)
 
@@ -174,6 +177,7 @@ async def run_analysis_send(qtd=TOP_QTY):
 
         print(f"DEBUG: Total de jogos encontrados pela API: {len(fixtures)}.")
         
+        # O LOG MAIS IMPORTANTE: Para identificar as datas distantes!
         for f in fixtures:
             kickoff_dt = kickoff_time_local(f, TZ, return_datetime=True)
             home_name = next((p["name"] for p in f.get("participants", []) if p["meta"]["location"] == "home"), "Time Desconhecido")
