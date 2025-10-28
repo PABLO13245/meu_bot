@@ -130,7 +130,7 @@ async def build_message(fixtures, api_token, qty=7):
     if count == 0:
         lines.append(f"⚠ Nenhuma partida TOP {qty} encontrada para as próximas 48h, com confiança acima de {MIN_CONFIDENCE}%.\n")
 
-    footer = "\n🔎 Obs: análise baseada em últimos 5 jogos (atualmente simulada). Use responsabilidade."
+    footer = "\n🔎 Obs: análise baseada em últimos 2 jogos (atualmente simulada). Use responsabilidade."
     lines.append(footer)
     return "\n".join(lines)
 
@@ -147,18 +147,17 @@ async def run_analysis_send(qtd=TOP_QTY):
         
     # 1. Definir o range de tempo (48h)
     now_local = datetime.now(TZ)
-    start_str = now_local.strftime("%Y-%m-%d") # Busca a partir do início de hoje
     time_limit_48h = now_local + timedelta(hours=48)
     
-    print(f"DEBUG: Buscando jogos de {start_str}. Limite de 48h: {time_limit_48h.strftime('%d/%m %H:%M')} (BRT)")
+    print(f"DEBUG: Buscando jogos futuros. Limite de 48h: {time_limit_48h.strftime('%d/%m %H:%M')} (BRT)")
 
     try:
-        # 2. Busca fixtures
-        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, per_page=100)
+        # 2. Busca fixtures (sem filtro de data para obter os jogos mais próximos)
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, per_page=100)
         
         if not fixtures:
             if CHAT_ID != "YOUR_CHAT_ID":
-                await bot.send_message(chat_id=CHAT_ID, text=f"⚠ A API não retornou jogos futuros a partir de hoje ({now_local.strftime('%d/%m')}).")
+                await bot.send_message(chat_id=CHAT_ID, text=f"⚠ A API não retornou jogos futuros para o período de análise.")
             return
         
         # 3. FILTRO TEMPORAL E DE INÍCIO
@@ -169,18 +168,20 @@ async def run_analysis_send(qtd=TOP_QTY):
         for f in fixtures:
             kickoff_dt = kickoff_time_local(f, TZ, return_datetime=True)
             
-            # 3.1. Filtro de 48 horas
+            # 3.1. Filtro de 48 horas (precisa ser antes do limite)
             if kickoff_dt > time_limit_48h:
                 continue
 
-            # 3.2. Filtro de JÁ COMEÇOU
+            # 3.2. Filtro de JÁ COMEÇOU (precisa ser depois do limite)
             if kickoff_dt > time_threshold:
                  upcoming_fixtures.append(f)
-            # else: print para debug de jogos que estavam próximos
+            # else: jogos que já passaram ou que começam em menos de 5 minutos são ignorados
 
         print(f"DEBUG: Jogos dentro de 48h e não iniciados: {len(upcoming_fixtures)}.")
         
         if not upcoming_fixtures:
+            # Esta mensagem só será enviada se a API retornar jogos, mas NENHUM deles
+            # passar nos filtros de 48h e 'não iniciado'.
             if CHAT_ID != "YOUR_CHAT_ID":
                 await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para as próximas 48h que ainda não começou.")
             return
@@ -220,7 +221,7 @@ def start_scheduler():
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0) # Noite
     
     scheduler.start()
-    print("✅ Agendador iniciado para 00:00, 06:00, 16:00 e 19:00 (BRT).")
+    print("✅ Agendador iniciado para 00:00, 06:00, e 12:00 (BRT).")
 
 async def main():
     """Função principal que mantém o bot rodando."""
