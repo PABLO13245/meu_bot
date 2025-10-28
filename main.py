@@ -268,7 +268,7 @@ async def main(api_token):
         suggestion, confidence = decide_best_market(home_metrics, away_metrics)
         
         # 2.3. Filtra resultados de alta confiança
-        if confidence < 70:
+        if confidence < 50:
             return None
 
         # 2.4. Formatação do resultado
