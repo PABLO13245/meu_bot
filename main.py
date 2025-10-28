@@ -1,14 +1,13 @@
 import asyncio
 import aiohttp
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta # Adicionado timedelta
 import pytz
 import sys
 import random
-import os # Novo import para ler variáveis de ambiente
+import os
 
 # CONFIGURAÇÃO: O script agora tentará ler o token da variável de ambiente 'SPORTMONKS_API_TOKEN'.
-# Se não encontrar, ele usará o placeholder.
-ENV_TOKEN = os.environ.get('API_TOKEN')
+ENV_TOKEN = os.environ.get('SPORTMONKS_API_TOKEN')
 API_TOKEN = ENV_TOKEN if ENV_TOKEN else "YOUR_SPORTMONKS_API_TOKEN" 
 
 # Configurações Base
@@ -38,7 +37,7 @@ def get_flag_emoji(country_code):
 async def fetch_upcoming_fixtures(api_token, start_date, per_page=150):
     """Busca jogos futuros na API da SportMonks, filtrando apenas por data e estado (TODAS AS LIGAS)."""
     
-    # Filtro de data e estado (AGORA SEM O FILTRO DE LEAGUE IDS)
+    # Filtro de data e estado (start_date é a data de hoje. A API retorna daqui para frente)
     main_filters = f"dates:{start_date};fixtureStates:{STATE_FUTURE_IDS}"
     
     url = (
@@ -51,7 +50,7 @@ async def fetch_upcoming_fixtures(api_token, start_date, per_page=150):
     
     # DEBUG: URL de Requisição (token omitido por segurança)
     print(f"DEBUG: Buscando jogos de {start_date} em TODAS as ligas.")
-    print(f"DEBUG: URL de Requisição: {url.split('api_token=')[0]}... (token omitido) - TESTE ESTA URL NO NAVEGADOR!")
+    print(f"DEBUG: URL de Requisição: {url.split('api_token=')[0]}... (token omitido)")
     
     try:
         async with aiohttp.ClientSession() as session:
@@ -236,16 +235,36 @@ async def main(api_token):
         print("⚠ Fuso horário 'America/Sao_Paulo' não encontrado. Usando UTC.")
         tz_local = pytz.utc
         
-    today_date = datetime.now(tz_local).strftime("%Y-%m-%d")
+    execution_time = datetime.now(tz_local)
+    today_date = execution_time.strftime("%Y-%m-%d") # Apenas para o filtro inicial da API
+    
+    # Define o limite exato de 24 horas a partir do momento da execução
+    time_limit_24h = execution_time + timedelta(hours=24)
 
-    # 1. Busca os jogos futuros
+
+    # 1. Busca os jogos futuros (pode vir com mais de 24h de antecedência)
     fixtures = await fetch_upcoming_fixtures(api_token, today_date, per_page=150)
     
     if not fixtures:
         print("\nNão foram encontrados jogos futuros para análise.")
         return
 
-    # 2. Prepara e executa a análise de todos os jogos em paralelo
+    # 2. FILTRO RIGOROSO DE 24 HORAS
+    # Remove todos os jogos que estão fora da janela de 24h (como os jogos de 09/11)
+    filtered_fixtures = []
+    for f in fixtures:
+        kickoff_dt = kickoff_time_local(f, tz_local, return_datetime=True)
+        if kickoff_dt <= time_limit_24h:
+            filtered_fixtures.append(f)
+            
+    print(f"✅ Jogos filtrados para 24h: {len(filtered_fixtures)} de {len(fixtures)} encontrados.")
+    
+    if not filtered_fixtures:
+        print("\nNenhum jogo encontrado dentro da janela de 24 horas (mesmo sem aplicar o filtro de confiança).")
+        return
+
+
+    # 3. Prepara e executa a análise dos jogos filtrados em paralelo
     async def analyze_fixture_task(fixture):
         """Função auxiliar para analisar um único jogo."""
         
@@ -254,12 +273,10 @@ async def main(api_token):
         away_team = next((p for p in fixture.get("participants", []) if p["meta"]["location"] == "away"), None)
 
         if not home_team or not away_team:
-            # print(f"⚠ Jogos sem participantes claros (ID: {fixture.get('id')}). Ignorando.")
             return None 
 
-        # 2.1. Simula as métricas dos times (em paralelo para o Home e Away)
+        # 3.1. Simula as métricas dos times (em paralelo para o Home e Away)
         try:
-            # A chamada para compute_team_metrics simula a busca de dados de performance
             home_metrics, away_metrics = await asyncio.gather(
                 compute_team_metrics(api_token, home_team["id"]),
                 compute_team_metrics(api_token, away_team["id"])
@@ -268,15 +285,14 @@ async def main(api_token):
             print(f"❌ Erro ao calcular métricas para jogo ID {fixture.get('id')}: {e}. Ignorando.")
             return None
         
-        # 2.2. Decisão de mercado
+        # 3.2. Decisão de mercado
         suggestion, confidence = decide_best_market(home_metrics, away_metrics)
         
-        # 2.3. Filtra resultados de alta confiança
-        # MANTENHO O 70% ORIGINAL AQUI, mas podemos reduzir para testar (ex: 50)
+        # 3.3. Filtra resultados de alta confiança (>= 70%)
         if confidence < 50:
             return None
 
-        # 2.4. Formatação do resultado
+        # 3.4. Formatação do resultado
         
         # Informações da Liga
         league = fixture.get("league", {})
@@ -301,25 +317,24 @@ async def main(api_token):
             ),
         }
         
-    # Executa todas as tarefas de análise concorrentemente
-    analysis_tasks = [analyze_fixture_task(f) for f in fixtures]
+    # Executa todas as tarefas de análise concorrentemente nos jogos FILTRADOS
+    analysis_tasks = [analyze_fixture_task(f) for f in filtered_fixtures]
     
-    # Filtra os resultados válidos (aqueles que não retornaram None)
+    # Filtra os resultados válidos (aqueles que não retornaram None e passaram no filtro de 70%)
     raw_results = await asyncio.gather(*analysis_tasks)
     valid_results = [res for res in raw_results if res is not None]
     
     if not valid_results:
-        # Esta é a mensagem que você verá se o filtro de 70% for muito rigoroso
-        print("\nNenhum jogo de alta confiança (>= 70%) encontrado para a data de hoje/próximos dias.")
+        print("\nNenhum jogo de alta confiança (>= 70%) encontrado dentro das próximas 24 horas.")
         return
     
-    # 3. Ordena os resultados por horário (do mais cedo para o mais tarde)
+    # 4. Ordena os resultados por horário (do mais cedo para o mais tarde)
     sorted_results = sorted(valid_results, key=lambda x: x['time'])
     
-    # 4. Exibe os resultados
+    # 5. Exibe os resultados
     print("\n" + "="*80)
-    print(f"🏆 ANÁLISE DE JOGOS FUTUROS - SINAL FORTE (>= 70%) 🏆")
-    print(f"Data de Referência (BRT): {datetime.now(tz_local).strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"🏆 ANÁLISE DE JOGOS FUTUROS (PRÓXIMAS 24H) - SINAL FORTE (>= 70%) 🏆")
+    print(f"Data/Hora de Referência (BRT): {execution_time.strftime('%d/%m/%Y %H:%M:%S')}")
     print("="*80)
     
     for result in sorted_results:
