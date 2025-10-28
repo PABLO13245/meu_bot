@@ -1,3 +1,4 @@
+# Importações necessárias para operações assíncronas e análise
 import os
 import asyncio
 from datetime import datetime, timedelta
@@ -6,6 +7,7 @@ from telegram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Importa TODAS as funções do analysis.py (API, análise e utilidades)
+# As funções foram reescritas para football-data.org, mas o main.py usa os mesmos nomes.
 from analysis import (
     fetch_upcoming_fixtures,
     compute_team_metrics,
@@ -15,9 +17,10 @@ from analysis import (
 )
 
 # CONFIGURAÇÕES via ENV (Valores default usados se a ENV falhar)
-API_TOKEN = os.getenv("API_TOKEN", "YOUR_SPORTMONKS_API_TOKEN") # SportMonks token
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_TOKEN") # Telegram bot token
-CHAT_ID = os.getenv("CHAT_ID", "YOUR_CHAT_ID")                     # chat id (string)
+# ATENÇÃO: Agora esta variável espera um X-Auth-Token do football-data.org!
+API_TOKEN = os.getenv("API_TOKEN", "YOUR_FOOTBALLDATA_API_TOKEN") 
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_TOKEN") 
+CHAT_ID = os.getenv("CHAT_ID", "YOUR_CHAT_ID")                     
 TZ = pytz.timezone("America/Sao_Paulo")
 
 # Bot do Telegram
@@ -49,6 +52,7 @@ async def build_message(fixtures, api_token, qty=7):
                 return None
             
             # Encontra IDs dos times (com base na localização 'home'/'away')
+            # A nova estrutura mapeada do football-data.org mantém 'meta'
             home_id = next((p["id"] for p in participants if p["meta"]["location"] == "home"), None)
             away_id = next((p["id"] for p in participants if p["meta"]["location"] == "away"), None)
 
@@ -57,6 +61,7 @@ async def build_message(fixtures, api_token, qty=7):
                 return None
             
             # Análise de Métricas (REAL)
+            # compute_team_metrics agora usa aiohttp
             hm, am = await asyncio.gather(
                 compute_team_metrics(api_token, home_id, last=5), 
                 compute_team_metrics(api_token, away_id, last=5)
@@ -112,12 +117,14 @@ async def build_message(fixtures, api_token, qty=7):
         # Dados da partida
         league_data = f.get("league", {})
         league_name = league_data.get("name", "Desconhecida")
+        # O country code agora é mapeado pelo analysis.py
         league_country_code = league_data.get("country", {}).get("code", "xx")
         
         kickoff_local = kickoff_time_local(f, TZ)
         
         # Emojis e nomes
         league_flag = get_flag_emoji(league_country_code)
+        # Os participantes também devem ter o country code mapeado
         home_flag = get_flag_emoji(home.get("country", {}).get("code", "xx"))
         away_flag = get_flag_emoji(away.get("country", {}).get("code", "xx"))
         
@@ -140,7 +147,7 @@ async def build_message(fixtures, api_token, qty=7):
     if count == 0:
         lines.append(f"⚠ Nenhuma partida TOP {qty} encontrada para as próximas 48h, com confiança acima de {MIN_CONFIDENCE}%.\n")
 
-    footer = "\n🔎 Obs: análise baseada em últimos 2 jogos (agora real) e responsabilidade."
+    footer = "\n🔎 Obs: análise baseada em últimos 5 jogos e responsabilidade."
     lines.append(footer)
     return "\n".join(lines)
 
@@ -148,8 +155,9 @@ async def build_message(fixtures, api_token, qty=7):
 async def run_analysis_send(qtd=TOP_QTY):
     """Executa o ciclo completo de busca, filtro e envio de mensagem."""
     
-    if API_TOKEN == "YOUR_SPORTMONKS_API_TOKEN":
-        print("\n🚨 ERRO: Token da API não configurado. Abortando execução.")
+    # ATENÇÃO: O API_TOKEN agora é para football-data.org (X-Auth-Token)
+    if API_TOKEN == "YOUR_FOOTBALLDATA_API_TOKEN":
+        print("\n🚨 ERRO: Token da API (football-data.org) não configurado. Abortando execução.")
         return 
     
     if CHAT_ID == "YOUR_CHAT_ID" or TELEGRAM_TOKEN == "YOUR_TELEGRAM_TOKEN":
@@ -162,7 +170,7 @@ async def run_analysis_send(qtd=TOP_QTY):
     print(f"DEBUG: Buscando jogos futuros. Limite de 48h: {time_limit_48h.strftime('%d/%m %H:%M')} (BRT)")
 
     try:
-        # 2. Busca fixtures (sem filtro de data para obter os jogos mais próximos)
+        # 2. Busca fixtures (agora com filtro de data no analysis.py)
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, per_page=100)
         
         if not fixtures:
@@ -179,6 +187,7 @@ async def run_analysis_send(qtd=TOP_QTY):
         
         # O LOG MAIS IMPORTANTE: Para identificar as datas distantes!
         for f in fixtures:
+            # kickoff_time_local agora usa datetime.fromisoformat
             kickoff_dt = kickoff_time_local(f, TZ, return_datetime=True)
             home_name = next((p["name"] for p in f.get("participants", []) if p["meta"]["location"] == "home"), "Time Desconhecido")
             away_name = next((p["name"] for p in f.get("participants", []) if p["meta"]["location"] == "away"), "Time Desconhecido")
@@ -199,8 +208,6 @@ async def run_analysis_send(qtd=TOP_QTY):
         print(f"DEBUG: Jogos dentro de 48h e não iniciados (restantes): {len(upcoming_fixtures)}.")
         
         if not upcoming_fixtures:
-            # Esta mensagem só será enviada se a API retornar jogos, mas NENHUM deles
-            # passar nos filtros de 48h e 'não iniciado'.
             if CHAT_ID != "YOUR_CHAT_ID":
                 await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para as próximas 48h que ainda não começou e/ou passou pelo filtro de tempo.")
             return
@@ -240,14 +247,15 @@ def start_scheduler():
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0) # Noite
     
     scheduler.start()
-    print("✅ Agendador iniciado para 00:00, 06:00, e 12:00 (BRT).")
+    print("✅ Agendador iniciado para 00:00, 06:00, 16:00, e 19:00 (BRT).")
 
 async def main():
     """Função principal que mantém o bot rodando."""
     
     # 1. Checagem de variáveis de ambiente
     missing = []
-    if API_TOKEN == "YOUR_SPORTMONKS_API_TOKEN": missing.append("API_TOKEN")
+    # Verifica o novo valor default
+    if API_TOKEN == "YOUR_FOOTBALLDATA_API_TOKEN": missing.append("API_TOKEN") 
     if TELEGRAM_TOKEN == "YOUR_TELEGRAM_TOKEN": missing.append("TELEGRAM_TOKEN")
     if CHAT_ID == "YOUR_CHAT_ID": missing.append("CHAT_ID")
         
