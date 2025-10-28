@@ -1,251 +1,254 @@
-import asyncio
-import aiohttp
-from datetime import datetime, timezone, timedelta
-import pytz
-import sys
 import os
-import random 
-from analysis import compute_team_metrics, decide_best_market # Importando as funções
+import asyncio
+from datetime import datetime, timedelta
+import pytz
+from telegram import Bot
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# CONFIGURAÇÃO: O script agora tentará ler o token da variável de ambiente 'SPORTMONKS_API_TOKEN'.
-ENV_TOKEN = os.environ.get('API_TOKEN')
-API_TOKEN = ENV_TOKEN if ENV_TOKEN else "API_TOKEN" 
+# Importa TODAS as funções do analysis.py (API, análise e utilidades)
+from analysis import (
+    fetch_upcoming_fixtures,
+    compute_team_metrics,
+    decide_best_market,
+    kickoff_time_local,
+    get_flag_emoji
+)
 
-# Configurações Base
-BASE_URL = "https://api.sportmonks.com/v3/football"
-STATE_FUTURE_IDS = "1,3" # 1=Awaiting, 3=Scheduled 
+# CONFIGURAÇÕES via ENV (Valores default usados se a ENV falhar)
+API_TOKEN = os.getenv("API_TOKEN", "YOUR_SPORTMONKS_API_TOKEN") # SportMonks token
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_TOKEN") # Telegram bot token
+CHAT_ID = os.getenv("CHAT_ID", "YOUR_CHAT_ID")                     # chat id (string)
+TZ = pytz.timezone("America/Sao_Paulo")
 
-# Mapeamento manual para corrigir ligas onde o código do país está ausente (Ex: Suécia)
-MANUAL_COUNTRY_MAP = {
-    "Allsvenskan": "SE", 
-}
-
-# Mapeamento de Países para Bandeiras (Emojis)
-def get_flag_emoji(country_code):
-    """Converte o código de país (ISO 3166-1 alpha-2) em emoji de bandeira."""
-    if country_code is None or len(country_code) != 2:
-        return ""
-    # Emojis de bandeira são gerados a partir de 2 caracteres regionais:
-    return "".join(chr(0x1F1E6 + ord(char) - ord('A')) for char in country_code.upper())
+# Bot do Telegram
+bot = Bot(token=TELEGRAM_TOKEN)
+TOP_QTY = 7 # Quantidade de partidas por envio (limite de TOP Oportunidades)
 
 
 # ----------------------------------------------------------------------
-# FUNÇÕES DE BUSCA DA API
+# FUNÇÕES DE ANÁLISE E MENSAGEM
 # ----------------------------------------------------------------------
 
-async def fetch_upcoming_fixtures(api_token, start_date, per_page=150):
-    """Busca jogos futuros na API da SportMonks, filtrando apenas por data e estado (TODAS AS LIGAS)."""
+async def build_message(fixtures, api_token, qty=7):
+    """Analisa as fixtures, ordena pela confiança e constrói a mensagem final."""
     
-    main_filters = f"dates:{start_date};fixtureStates:{STATE_FUTURE_IDS}"
+    # 1. Analisa todos os jogos em paralelo
+    analysis_tasks = []
     
-    url = (
-        f"{BASE_URL}/fixtures"
-        f"?api_token={api_token}"
-        f"&include=participants;league;season;participants.country;league.country"
-        f"&filters={main_filters}"
-        f"&per_page={per_page}"
-    )
-    
-    print(f"DEBUG: Buscando jogos de {start_date} em TODAS as ligas.")
-    
-    try:
-        async with aiohttp.ClientSession() as session:
-            max_retries = 3
-            for attempt in range(max_retries):
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        fixtures = data.get("data", [])
-                        
-                        # CORREÇÃO PÓS-PROCESSAMENTO
-                        for f in fixtures:
-                            league_name = f.get("league", {}).get("name")
-                            if league_name in MANUAL_COUNTRY_MAP:
-                                country_code = MANUAL_COUNTRY_MAP[league_name]
-                                f['league']['country'] = {'code': country_code}
-                                for p in f.get('participants', []):
-                                    if 'country' not in p or not p['country'].get('code'):
-                                        p['country'] = {'code': country_code}
-
-                        print(f"✅ Jogos futuros encontrados (Todas as Ligas): {len(fixtures)}")
-                        return fixtures
-                    
-                    elif response.status == 429 and attempt < max_retries - 1:
-                        wait_time = 2 ** attempt 
-                        print(f"⚠ Rate Limit atingido (429). Tentando novamente em {wait_time}s...")
-                        await asyncio.sleep(wait_time)
-                    else:
-                        print(f"❌ Erro ao buscar fixtures: {response.status} - {await response.text()}")
-                        return []
-                        
-            return []
-                
-    except Exception as e:
-        print(f"❌ Erro na requisição de fixtures: {e}")
-        return []
-
-# ----------------------------------------------------------------------
-# FUNÇÕES AUXILIARES DE DATA
-# ----------------------------------------------------------------------
-
-def kickoff_time_local(fixture, tz, return_datetime=False):
-    """Converte a string de horário UTC da API para horário local (BRT) e formata."""
-    
-    # String da API está no formato: YYYY-MM-DD HH:MM:SS
-    starting_at_str = fixture.get("starting_at") 
-    
-    if not starting_at_str:
-        return "N/A"
-        
-    try:
-        # 1. Parsear como UTC
-        dt_utc = datetime.strptime(starting_at_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-        
-        # 2. Converter para o fuso horário local (BRT)
-        dt_local = dt_utc.astimezone(tz)
-        
-        if return_datetime:
-            return dt_local
-        
-        # 3. Formatar
-        now_local = datetime.now(tz).date()
-        if dt_local.date() == now_local:
-            return dt_local.strftime("%H:%M")
-        else:
-            return dt_local.strftime("%H:%M — %d/%m")
-            
-    except Exception as e:
-        print(f"Erro ao processar data {starting_at_str}: {e}")
-        if return_datetime:
-            return datetime.now(tz)
-        return "Erro de data"
-
-# ----------------------------------------------------------------------
-# FUNÇÃO PRINCIPAL DE EXECUÇÃO
-# ----------------------------------------------------------------------
-
-async def main(api_token):
-    """Função principal para buscar, analisar e exibir as sugestões de apostas."""
-    if api_token == "API_TOKEN":
-        print("\n🚨 ERRO: Por favor, substitua 'YOUR_SPORTMONKS_API_TOKEN' pelo seu token real da SportMonks para executar a busca na API.")
-        return
-
-    # Configuração de Fuso Horário Local (Brasil - São Paulo)
-    try:
-        tz_local = pytz.timezone("America/Sao_Paulo")
-    except pytz.exceptions.UnknownTimeZoneError:
-        print("⚠ Fuso horário 'America/Sao_Paulo' não encontrado. Usando UTC.")
-        tz_local = timezone.utc
-        
-    execution_time = datetime.now(tz_local)
-    today_date = execution_time.strftime("%Y-%m-%d") 
-    
-    # >>> MUDANÇA AQUI: Define o limite exato de 48 horas a partir do momento da execução
-    time_limit_48h = execution_time + timedelta(hours=48)
-
-
-    # 1. Busca os jogos futuros
-    fixtures = await fetch_upcoming_fixtures(api_token, today_date, per_page=150)
-    
-    if not fixtures:
-        print("\nNão foram encontrados jogos futuros para análise.")
-        return
-
-    # 2. FILTRO RIGOROSO DE 48 HORAS
-    # Remove todos os jogos que estão fora da nova janela de 48h
-    filtered_fixtures = []
     for f in fixtures:
-        kickoff_dt = kickoff_time_local(f, tz_local, return_datetime=True)
-        # >>> MUDANÇA AQUI: Compara com o novo limite de 48h
-        if kickoff_dt <= time_limit_48h: 
-            filtered_fixtures.append(f)
+        async def analyze_and_rate(fixture):
+            participants = fixture.get("participants", [])
+            if len(participants) < 2:
+                return None
             
-    print(f"✅ Jogos filtrados para 48h: {len(filtered_fixtures)} de {len(fixtures)} encontrados.")
-    
-    if not filtered_fixtures:
-        print("\nNenhum jogo encontrado dentro da janela de 48 horas (mesmo sem aplicar o filtro de confiança).")
-        return
+            # Encontra IDs dos times (com base na localização 'home'/'away')
+            home_id = next((p["id"] for p in participants if p["meta"]["location"] == "home"), None)
+            away_id = next((p["id"] for p in participants if p["meta"]["location"] == "away"), None)
 
-
-    # 3. Prepara e executa a análise dos jogos filtrados em paralelo
-    async def analyze_fixture_task(fixture):
-        """Função auxiliar para analisar um único jogo."""
-        
-        # Tenta extrair participantes
-        home_team = next((p for p in fixture.get("participants", []) if p["meta"]["location"] == "home"), None)
-        away_team = next((p for p in fixture.get("participants", []) if p["meta"]["location"] == "away"), None)
-
-        if not home_team or not away_team:
-            return None 
-
-        # 3.1. Simula as métricas dos times (em paralelo para o Home e Away)
-        try:
-            home_metrics, away_metrics = await asyncio.gather(
-                compute_team_metrics(api_token, home_team["id"]),
-                compute_team_metrics(api_token, away_team["id"])
+            if not home_id or not away_id:
+                return None
+            
+            # Análise de Métricas (Simulada)
+            hm, am = await asyncio.gather(
+                compute_team_metrics(api_token, home_id, last=5), 
+                compute_team_metrics(api_token, away_id, last=5)
             )
-        except Exception as e:
-            print(f"❌ Erro ao calcular métricas para jogo ID {fixture.get('id')}: {e}. Ignorando.")
-            return None
-        
-        # 3.2. Decisão de mercado
-        suggestion, confidence = decide_best_market(home_metrics, away_metrics)
-        
-        # 3.3. Filtra resultados de alta confiança (>= 70%)
-        if confidence < 50:
-            return None
 
-        # 3.4. Formatação do resultado
-        league = fixture.get("league", {})
-        league_name = league.get("name", "Liga Desconhecida")
-        country_code = league.get("country", {}).get("code")
-        flag_emoji = get_flag_emoji(country_code or '??')
-        time_local = kickoff_time_local(fixture, tz_local)
-        match_str = f"{home_team.get('name', 'Casa')} vs {away_team.get('name', 'Fora')}"
-        
-        return {
-            "time": kickoff_time_local(fixture, tz_local, return_datetime=True),
-            "output_line": (
-                f"⏰ {time_local} | {flag_emoji} {league_name} \n"
-                f"   ⚽ {match_str}\n"
-                f"   📈 SUGERIDO: {suggestion} (Confiança: {confidence}%)\n"
-                f"   ---\n"
-            ),
-        }
-        
-    # Executa todas as tarefas de análise concorrentemente nos jogos FILTRADOS
-    analysis_tasks = [analyze_fixture_task(f) for f in filtered_fixtures]
-    
-    raw_results = await asyncio.gather(*analysis_tasks)
-    valid_results = [res for res in raw_results if res is not None]
-    
-    if not valid_results:
-        print("\nNenhum jogo de alta confiança (>= 70%) encontrado dentro das próximas 48 horas.")
-        return
-    
-    # 4. Ordena os resultados por horário
-    sorted_results = sorted(valid_results, key=lambda x: x['time'])
-    
-    # 5. Exibe os resultados
-    print("\n" + "="*80)
-    # >>> MUDANÇA AQUI: Título do relatório
-    print(f"🏆 ANÁLISE DE JOGOS FUTUROS (PRÓXIMAS 48H) - SINAL FORTE (>= 70%) 🏆") 
-    print(f"Data/Hora de Referência (BRT): {execution_time.strftime('%d/%m/%Y %H:%M:%S')}")
-    print("="*80)
-    
-    for result in sorted_results:
-        print(result["output_line"], end='')
-        
-    print("="*80)
-    print("Fim da Análise. Lembre-se: As métricas de time são SIMULADAS.")
+            suggestion, confidence = decide_best_market(hm, am)
+            
+            # Filtro: Apenas sinais fortes (>= 70%)
+            if confidence < 70:
+                return None
+            
+            fixture['suggestion'] = suggestion
+            fixture['confidence'] = confidence
+            return fixture
 
-if __name__ == "__main__":
+        analysis_tasks.append(analyze_and_rate(f))
+
+    # Executa a análise para todos os jogos e filtra os nulos (confiança < 70)
+    analyzed_fixtures_raw = await asyncio.gather(*analysis_tasks)
+    analyzed_fixtures = [f for f in analyzed_fixtures_raw if f is not None]
+
+    # 2. Ordena pela confiança (do maior para o menor)
+    analyzed_fixtures.sort(key=lambda x: (x.get('confidence', 0), x.get("starting_at", "")), reverse=True)
+
+
+    # 3. CONSTRUIR MENSAGEM
+    now = datetime.now(TZ)
     
-    token = API_TOKEN
-    if len(sys.argv) > 1:
-        token = sys.argv[1]
+    header = (
+        f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS NAS PRÓXIMAS 48H)\n"
+        f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
+        f"🔥 Top {qty} Oportunidades (Sinais > 70%) 🔥\n\n"
+    )
+    lines = [header]
+
+    count = 0
     
+    for f in analyzed_fixtures:
+        if count >= qty:
+            break
+            
+        participants = f.get("participants", [])
+        # Uso 'next' para garantir que pegamos os times corretos, independentemente da ordem na lista
+        home = next((p for p in participants if p["meta"]["location"] == "home"), {})
+        away = next((p for p in participants if p["meta"]["location"] == "away"), {})
+
+        # Dados da partida
+        league_data = f.get("league", {})
+        league_name = league_data.get("name", "Desconhecida")
+        league_country_code = league_data.get("country", {}).get("code", "xx")
+        
+        kickoff_local = kickoff_time_local(f, TZ)
+        
+        # Emojis e nomes
+        league_flag = get_flag_emoji(league_country_code)
+        home_flag = get_flag_emoji(home.get("country", {}).get("code", "xx"))
+        away_flag = get_flag_emoji(away.get("country", {}).get("code", "xx"))
+        
+        home_name = home.get("name", "Casa")
+        away_name = away.get("name", "Fora")
+        
+        suggestion = f.get('suggestion', 'N/A')
+        confidence = f.get('confidence', 0)
+
+        part = (
+            f"{count + 1}. ⚽ {home_flag} {home_name} x {away_name} {away_flag}\n"
+            f"🏆 {league_flag} {league_name}  •  🕒 {kickoff_local}\n"
+            f"🎯 Sugestão principal: {suggestion}\n"
+            f"💹 Confiança: {confidence}%\n"
+            "──────────────────────────────\n"
+        )
+        lines.append(part)
+        count += 1
+
+    if count == 0:
+        lines.append(f"⚠ Nenhuma partida TOP {qty} encontrada para as próximas 48h, com confiança acima de 70%.\n")
+
+    footer = "\n🔎 Obs: análise baseada em últimos 5 jogos (atualmente simulada). Use responsabilidade."
+    lines.append(footer)
+    return "\n".join(lines)
+
+
+async def run_analysis_send(qtd=TOP_QTY):
+    """Executa o ciclo completo de busca, filtro e envio de mensagem."""
+    
+    if API_TOKEN == "YOUR_SPORTMONKS_API_TOKEN":
+        print("\n🚨 ERRO: Token da API não configurado. Abortando execução.")
+        return 
+    
+    if CHAT_ID == "YOUR_CHAT_ID" or TELEGRAM_TOKEN == "YOUR_TELEGRAM_TOKEN":
+        print("\n🚨 ERRO: CHAT_ID ou TELEGRAM_TOKEN não configurados. A análise será executada, mas a mensagem não será enviada.")
+        
+    # 1. Definir o range de tempo (48h)
+    now_local = datetime.now(TZ)
+    start_str = now_local.strftime("%Y-%m-%d") # Busca a partir do início de hoje
+    time_limit_48h = now_local + timedelta(hours=48)
+    
+    print(f"DEBUG: Buscando jogos de {start_str}. Limite de 48h: {time_limit_48h.strftime('%d/%m %H:%M')} (BRT)")
+
     try:
-        asyncio.run(main(token))
+        # 2. Busca fixtures
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, start_str, per_page=100)
+        
+        if not fixtures:
+            if CHAT_ID != "YOUR_CHAT_ID":
+                await bot.send_message(chat_id=CHAT_ID, text=f"⚠ A API não retornou jogos futuros a partir de hoje ({now_local.strftime('%d/%m')}).")
+            return
+        
+        # 3. FILTRO TEMPORAL E DE INÍCIO
+        upcoming_fixtures = []
+        # Margem de segurança de 5 minutos (não considerar jogos que começam em menos de 5 min)
+        time_threshold = now_local + timedelta(minutes=5) 
+
+        for f in fixtures:
+            kickoff_dt = kickoff_time_local(f, TZ, return_datetime=True)
+            
+            # 3.1. Filtro de 48 horas
+            if kickoff_dt > time_limit_48h:
+                continue
+
+            # 3.2. Filtro de JÁ COMEÇOU
+            if kickoff_dt > time_threshold:
+                 upcoming_fixtures.append(f)
+            # else: print para debug de jogos que estavam próximos
+
+        print(f"DEBUG: Jogos dentro de 48h e não iniciados: {len(upcoming_fixtures)}.")
+
+        if not upcoming_fixtures:
+            if CHAT_ID != "YOUR_CHAT_ID":
+                await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para as próximas 48h que ainda não começou.")
+            return
+            
+        # 4. Análise, construção da mensagem e envio
+        message = await build_message(upcoming_fixtures, API_TOKEN, qtd)
+        
+        if CHAT_ID != "YOUR_CHAT_ID" and TELEGRAM_TOKEN != "YOUR_TELEGRAM_TOKEN":
+             # Parse mode é Markdown
+            await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
+        else:
+            print("--- MENSAGEM PRONTA (NÃO ENVIADA) ---")
+            print(message)
+            print("-----------------------------------")
+        
+    except Exception as e:
+        # log and send minimal error
+        print(f"❌ Erro em run_analysis_send: {e}")
+        try:
+            if CHAT_ID != "YOUR_CHAT_ID":
+                 await bot.send_message(chat_id=CHAT_ID, text=f"❌ Erro na análise. Verifique os logs.")
+        except Exception:
+            pass
+            
+# ----------------------------------------------------------------------
+# SCHEDULER E EXECUÇÃO PRINCIPAL
+# ----------------------------------------------------------------------
+
+def start_scheduler():
+    """Inicia o agendador de tarefas."""
+    scheduler = AsyncIOScheduler(timezone=TZ)
+    
+    # Horários de execução (BRT)
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=0, minute=0) # Meia-noite (para pegar jogos do dia)
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=6, minute=0) # Manhã
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=16, minute=0) # Tarde
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0) # Noite
+    
+    scheduler.start()
+    print("✅ Agendador iniciado para 00:00, 06:00, 16:00 e 19:00 (BRT).")
+
+async def main():
+    """Função principal que mantém o bot rodando."""
+    
+    # 1. Checagem de variáveis de ambiente
+    missing = []
+    if API_TOKEN == "YOUR_SPORTMONKS_API_TOKEN": missing.append("API_TOKEN")
+    if TELEGRAM_TOKEN == "YOUR_TELEGRAM_TOKEN": missing.append("TELEGRAM_TOKEN")
+    if CHAT_ID == "YOUR_CHAT_ID": missing.append("CHAT_ID")
+        
+    if missing:
+        print("🚨 ATENÇÃO: Variáveis de ambiente ausentes ou com valor default:", missing)
+        print("O bot rodará o scheduler, mas não enviará mensagens até a configuração correta.")
+
+    # 2. Inicia o agendador
+    start_scheduler()
+    
+    # 3. Opção de teste imediato
+    if os.getenv("TEST_NOW", "0") == "1":
+        print("TEST_NOW=1 -> enviando teste imediato...")
+        await run_analysis_send(TOP_QTY)
+        
+    # 4. Mantém o loop ativo (Keep Alive) - ESSENCIAL PARA O SCHEDULER
+    try:
+        # Dorme por 1 hora, mas o agendador continua rodando em background
+        while True:
+            await asyncio.sleep(60 * 60) 
+    except Exception as e:
+        print(f"Erro no loop principal: {e}")
+        
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nExecução interrompida pelo usuário.")
+        print("Bot interrompido manualmente.")
