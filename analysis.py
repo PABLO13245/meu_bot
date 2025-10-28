@@ -26,10 +26,14 @@ def get_flag_emoji(country_code):
 # FUNÇÕES DE BUSCA DA API
 # ----------------------------------------------------------------------
 
-async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
-    """Busca jogos futuros na API da SportMonks, filtrando apenas por data e estado (TODAS AS LIGAS)."""
+async def fetch_upcoming_fixtures(api_token, per_page=100):
+    """
+    Busca jogos futuros na API da SportMonks SEM filtro de data de início, 
+    confiando no filtro de 48h do Python para jogos próximos.
+    """
     
-    main_filters = f"dates:{start_date};fixtureStates:{STATE_FUTURE_IDS}"
+    # Filtro agora é apenas o estado (Awaiting, Scheduled)
+    main_filters = f"fixtureStates:{STATE_FUTURE_IDS}"
     
     url = (
         f"{BASE_URL}/fixtures"
@@ -39,7 +43,7 @@ async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
         f"&per_page={per_page}"
     )
     
-    print(f"DEBUG: Buscando jogos de {start_date} em TODAS as ligas.")
+    print(f"DEBUG: Buscando jogos futuros em TODAS as ligas (sem filtro de data).")
     
     try:
         async with aiohttp.ClientSession() as session:
