@@ -2,6 +2,12 @@ import asyncio
 import aiohttp
 from datetime import datetime, timezone
 import pytz
+import sys
+import random
+
+# CONFIGURAÇÃO: Insira seu token da API aqui.
+# Você também pode passar o token como argumento na linha de comando.
+API_TOKEN = "YOUR_SPORTMONKS_API_TOKEN" 
 
 # Configurações Base
 BASE_URL = "https://api.sportmonks.com/v3/football"
@@ -47,30 +53,41 @@ async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
     
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    print(f"❌ Erro ao buscar fixtures: {response.status} - {await response.text()}")
-                    return []
-                
-                data = await response.json()
-                fixtures = data.get("data", [])
-                
-                # CORREÇÃO PÓS-PROCESSAMENTO: Injetar códigos de país se ausentes (Bandeiras)
-                for f in fixtures:
-                    league_name = f.get("league", {}).get("name")
-                    
-                    # 1. Tenta usar mapeamento manual para a liga
-                    if league_name in MANUAL_COUNTRY_MAP:
-                        country_code = MANUAL_COUNTRY_MAP[league_name]
-                        f['league']['country'] = {'code': country_code}
+            # Implementação básica de backoff para lidar com rate limits, se necessário
+            max_retries = 3
+            for attempt in range(max_retries):
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        fixtures = data.get("data", [])
                         
-                        # 2. Injeta o código do país da liga nos times (se o time não tiver)
-                        for p in f.get('participants', []):
-                            if 'country' not in p or not p['country'].get('code'):
-                                p['country'] = {'code': country_code}
+                        # CORREÇÃO PÓS-PROCESSAMENTO: Injetar códigos de país se ausentes (Bandeiras)
+                        for f in fixtures:
+                            league_name = f.get("league", {}).get("name")
+                            
+                            # 1. Tenta usar mapeamento manual para a liga
+                            if league_name in MANUAL_COUNTRY_MAP:
+                                country_code = MANUAL_COUNTRY_MAP[league_name]
+                                f['league']['country'] = {'code': country_code}
+                                
+                                # 2. Injeta o código do país da liga nos times (se o time não tiver)
+                                for p in f.get('participants', []):
+                                    if 'country' not in p or not p['country'].get('code'):
+                                        p['country'] = {'code': country_code}
 
-                print(f"✅ Jogos futuros encontrados (Todas as Ligas): {len(fixtures)}")
-                return fixtures
+                        print(f"✅ Jogos futuros encontrados (Todas as Ligas): {len(fixtures)}")
+                        return fixtures
+                    
+                    elif response.status == 429 and attempt < max_retries - 1:
+                        # Too Many Requests - esperar e tentar novamente
+                        wait_time = 2 ** attempt 
+                        print(f"⚠ Rate Limit atingido (429). Tentando novamente em {wait_time}s...")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        print(f"❌ Erro ao buscar fixtures: {response.status} - {await response.text()}")
+                        return []
+                        
+            return [] # Retorna vazio se todas as tentativas falharem
                 
     except Exception as e:
         print(f"❌ Erro na requisição de fixtures: {e}")
@@ -81,9 +98,10 @@ async def compute_team_metrics(api_token, team_id, last=5):
     Simula a busca e cálculo de métricas de uma equipe.
     (Em uma versão real, este seria o ponto onde você buscar a performance real do time)
     """
+    # AWAIT AQUI É NECESSÁRIO PARA SIMULAR O TEMPO DE REQUISIÇÃO REAL
+    await asyncio.sleep(random.uniform(0.1, 0.5)) 
     
     # Simulação: Retornamos dados simulados com variações para que a ordenação funcione.
-    import random
     
     # Gera uma pequena variação para simular diferentes estatísticas de times
     if random.random() < 0.1: # 10% de chance de ter um time ruim
@@ -118,7 +136,7 @@ def decide_best_market(home_metrics, away_metrics):
     
     # 1. CÁLCULO DE FORÇA
     
-    # Média de gols esperados do jogo
+    # Média de gols esperados do jogo (baseado em GS Home + GC Away e GS Away + GC Home)
     total_avg_goals = home_metrics["avg_gs"] + away_metrics["avg_gc"] + \
                       away_metrics["avg_gs"] + home_metrics["avg_gc"]
                       
@@ -134,25 +152,30 @@ def decide_best_market(home_metrics, away_metrics):
     # 2. DECISÃO (SIMPLIFICADA)
     
     suggestion = "Sem sinal forte — evite aposta"
-    confidence = 50 # Base
+    confidence = 50 # Base (Mínimo para ser listado)
     
     # Analisando o mercado de Gols
     if total_avg_goals >= 2.8:
-        suggestion = "Mais de 2.5 Gols"
+        suggestion = "Mais de 2.5 Gols (Over 2.5)"
         confidence += int(min(total_avg_goals * 10, 40)) # Aumenta confiança com a média
     elif total_avg_goals >= 2.0:
-        suggestion = "Mais de 1.5 Gols"
+        suggestion = "Mais de 1.5 Gols (Over 1.5)"
         confidence += int(min(total_avg_goals * 10, 30))
         
     # Analisando o mercado de Vencedor (se a diferença de forma é grande)
     if form_diff > 40:
         winner = "Casa" if home_form > away_form else "Fora"
-        if winner == "Casa" and home_metrics["avg_gs"] > 2:
-            suggestion = f"Vitória do Time da Casa ({winner})"
-            confidence = max(confidence, 80) # Sobe a confiança para alto
+        
+        # O time mais forte precisa ter boa média de ataque para justificar a vitória
+        if winner == "Casa" and home_metrics["avg_gs"] > 2.0:
+            suggestion = f"Vitória do Time da Casa (ML Home)"
+            confidence = max(confidence, 85) # Sobe a confiança para alto
         elif winner == "Fora" and away_metrics["avg_gs"] > 1.8:
-            suggestion = f"Vitória do Time Visitante ({winner})"
-            confidence = max(confidence, 80)
+            suggestion = f"Vitória do Time Visitante (ML Away)"
+            confidence = max(confidence, 85)
+        # Se a sugestão for vitória e a sugestão anterior for over 2.5, mantém a vitória.
+        # Caso contrário, mantém a melhor sugestão com maior confiança.
+
 
     # Garante que a confiança fique entre 50% e 99%
     confidence = min(99, max(50, confidence))
@@ -192,3 +215,123 @@ def kickoff_time_local(fixture, tz, return_datetime=False):
             # Retorna a data atual como fallback em caso de erro (para evitar quebras no filtro)
             return datetime.now(tz)
         return "Erro de data"
+
+# ----------------------------------------------------------------------
+# FUNÇÃO PRINCIPAL DE EXECUÇÃO
+# ----------------------------------------------------------------------
+
+async def main(api_token):
+    """Função principal para buscar, analisar e exibir as sugestões de apostas."""
+    if api_token == "YOUR_SPORTMONKS_API_TOKEN":
+        print("\n🚨 ERRO: Por favor, substitua 'YOUR_SPORTMONKS_API_TOKEN' pelo seu token real da SportMonks para executar a busca na API.")
+        return
+
+    # Configuração de Fuso Horário Local (Brasil - São Paulo)
+    try:
+        tz_local = pytz.timezone("America/Sao_Paulo")
+    except pytz.exceptions.UnknownTimeZoneError:
+        print("⚠ Fuso horário 'America/Sao_Paulo' não encontrado. Usando UTC.")
+        tz_local = pytz.utc
+        
+    today_date = datetime.now(tz_local).strftime("%Y-%m-%d")
+
+    # 1. Busca os jogos futuros
+    fixtures = await fetch_upcoming_fixtures(api_token, today_date, per_page=150)
+    
+    if not fixtures:
+        print("\nNão foram encontrados jogos futuros para análise.")
+        return
+
+    # 2. Prepara e executa a análise de todos os jogos em paralelo
+    async def analyze_fixture_task(fixture):
+        """Função auxiliar para analisar um único jogo."""
+        
+        # Tenta extrair participantes
+        home_team = next((p for p in fixture.get("participants", []) if p["meta"]["location"] == "home"), None)
+        away_team = next((p for p in fixture.get("participants", []) if p["meta"]["location"] == "away"), None)
+
+        if not home_team or not away_team:
+            # print(f"⚠ Jogos sem participantes claros (ID: {fixture.get('id')}). Ignorando.")
+            return None 
+
+        # 2.1. Simula as métricas dos times (em paralelo para o Home e Away)
+        try:
+            home_metrics, away_metrics = await asyncio.gather(
+                compute_team_metrics(api_token, home_team["id"]),
+                compute_team_metrics(api_token, away_team["id"])
+            )
+        except Exception as e:
+            print(f"❌ Erro ao calcular métricas para jogo ID {fixture.get('id')}: {e}. Ignorando.")
+            return None
+        
+        # 2.2. Decisão de mercado
+        suggestion, confidence = decide_best_market(home_metrics, away_metrics)
+        
+        # 2.3. Filtra resultados de alta confiança
+        if confidence < 70:
+            return None
+
+        # 2.4. Formatação do resultado
+        
+        # Informações da Liga
+        league = fixture.get("league", {})
+        league_name = league.get("name", "Liga Desconhecida")
+        
+        # Código do país da liga (com fallback para '??' se não for encontrado)
+        country_code = league.get("country", {}).get("code")
+        flag_emoji = get_flag_emoji(country_code or '??')
+        
+        time_local = kickoff_time_local(fixture, tz_local)
+        
+        match_str = f"{home_team.get('name', 'Casa')} vs {away_team.get('name', 'Fora')}"
+        
+        # Retorna um dicionário para fácil ordenação e exibição
+        return {
+            "time": kickoff_time_local(fixture, tz_local, return_datetime=True),
+            "output_line": (
+                f"⏰ {time_local} | {flag_emoji} {league_name} \n"
+                f"   ⚽ {match_str}\n"
+                f"   📈 SUGERIDO: {suggestion} (Confiança: {confidence}%)\n"
+                f"   ---\n"
+            ),
+        }
+        
+    # Executa todas as tarefas de análise concorrentemente
+    analysis_tasks = [analyze_fixture_task(f) for f in fixtures]
+    
+    # Filtra os resultados válidos (aqueles que não retornaram None)
+    raw_results = await asyncio.gather(*analysis_tasks)
+    valid_results = [res for res in raw_results if res is not None]
+    
+    if not valid_results:
+        print("\nNenhum jogo de alta confiança (>= 70%) encontrado para a data de hoje/próximos dias.")
+        return
+    
+    # 3. Ordena os resultados por horário (do mais cedo para o mais tarde)
+    sorted_results = sorted(valid_results, key=lambda x: x['time'])
+    
+    # 4. Exibe os resultados
+    print("\n" + "="*80)
+    print(f"🏆 ANÁLISE DE JOGOS FUTUROS - SINAL FORTE (>= 70%) 🏆")
+    print(f"Data de Referência (BRT): {datetime.now(tz_local).strftime('%d/%m/%Y %H:%M:%S')}")
+    print("="*80)
+    
+    for result in sorted_results:
+        # A linha já está formatada no analyze_fixture_task
+        print(result["output_line"], end='')
+        
+    print("="*80)
+    print("Fim da Análise. Lembre-se: As métricas de time são SIMULADAS.")
+
+if _name_ == "_main_":
+    
+    token = API_TOKEN
+    # Permite passar o token como argumento de linha de comando
+    if len(sys.argv) > 1:
+        token = sys.argv[1]
+    
+    try:
+        # Rodar a função principal assíncrona
+        asyncio.run(main(token))
+    except KeyboardInterrupt:
+        print("\nExecução interrompida pelo usuário.")
