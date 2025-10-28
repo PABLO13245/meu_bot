@@ -24,6 +24,8 @@ TZ = pytz.timezone("America/Sao_Paulo")
 bot = Bot(token=TELEGRAM_TOKEN)
 TOP_QTY = 7 # Quantidade de partidas por envio (limite de TOP Oportunidades)
 
+# Filtro mínimo de confiança (para aparecer na lista de oportunidades)
+MIN_CONFIDENCE = 65 
 
 # ----------------------------------------------------------------------
 # FUNÇÕES DE ANÁLISE E MENSAGEM
@@ -54,10 +56,11 @@ async def build_message(fixtures, api_token, qty=7):
                 compute_team_metrics(api_token, away_id, last=5)
             )
 
+            # decide_best_market agora escolhe o melhor mercado entre todos (Gols FT, Vencedor, Escanteios, Gols HT)
             suggestion, confidence = decide_best_market(hm, am)
             
-            # Filtro: Apenas sinais fortes (>= 70%)
-            if confidence < 70:
+            # Filtro: Apenas sinais fortes (>= MIN_CONFIDENCE)
+            if confidence < MIN_CONFIDENCE:
                 return None
             
             fixture['suggestion'] = suggestion
@@ -66,7 +69,7 @@ async def build_message(fixtures, api_token, qty=7):
 
         analysis_tasks.append(analyze_and_rate(f))
 
-    # Executa a análise para todos os jogos e filtra os nulos (confiança < 70)
+    # Executa a análise para todos os jogos e filtra os nulos (confiança < MIN_CONFIDENCE)
     analyzed_fixtures_raw = await asyncio.gather(*analysis_tasks)
     analyzed_fixtures = [f for f in analyzed_fixtures_raw if f is not None]
 
@@ -77,10 +80,11 @@ async def build_message(fixtures, api_token, qty=7):
     # 3. CONSTRUIR MENSAGEM
     now = datetime.now(TZ)
     
+    # Altera o cabeçalho para refletir o novo filtro
     header = (
         f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS NAS PRÓXIMAS 48H)\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
-        f"🔥 Top {qty} Oportunidades (Sinais > 70%) 🔥\n\n"
+        f"🔥 Top {qty} Oportunidades (Sinais > {MIN_CONFIDENCE}%) 🔥\n\n"
     )
     lines = [header]
 
@@ -124,7 +128,7 @@ async def build_message(fixtures, api_token, qty=7):
         count += 1
 
     if count == 0:
-        lines.append(f"⚠ Nenhuma partida TOP {qty} encontrada para as próximas 48h, com confiança acima de 70%.\n")
+        lines.append(f"⚠ Nenhuma partida TOP {qty} encontrada para as próximas 48h, com confiança acima de {MIN_CONFIDENCE}%.\n")
 
     footer = "\n🔎 Obs: análise baseada em últimos 5 jogos (atualmente simulada). Use responsabilidade."
     lines.append(footer)
@@ -175,7 +179,7 @@ async def run_analysis_send(qtd=TOP_QTY):
             # else: print para debug de jogos que estavam próximos
 
         print(f"DEBUG: Jogos dentro de 48h e não iniciados: {len(upcoming_fixtures)}.")
-
+        
         if not upcoming_fixtures:
             if CHAT_ID != "YOUR_CHAT_ID":
                 await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para as próximas 48h que ainda não começou.")
