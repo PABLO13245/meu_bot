@@ -1,9 +1,9 @@
 import asyncio
 import aiohttp
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pytz
 import random
-import numpy as np
+import numpy as np # Dependência que precisa estar no requirements.txt
 
 # Configurações Base
 BASE_URL = "https://api.sportmonks.com/v3/football"
@@ -37,6 +37,7 @@ async def fetch_upcoming_fixtures(api_token, per_page=100):
     # Filtro agora é apenas o estado (Awaiting, Scheduled)
     main_filters = f"fixtureStates:{STATE_FUTURE_IDS}"
     
+    # Adicionamos "seasons" para garantir que todos os dados relacionados ao ano estão vindo.
     url = (
         f"{BASE_URL}/fixtures"
         f"?api_token={api_token}"
@@ -56,7 +57,7 @@ async def fetch_upcoming_fixtures(api_token, per_page=100):
                         data = await response.json()
                         fixtures = data.get("data", [])
                         
-                        # CORREÇÃO PÓS-PROCESSAMENTO
+                        # CORREÇÃO PÓS-PROCESSAMENTO para ligas com dados incompletos
                         for f in fixtures:
                             league_name = f.get("league", {}).get("name")
                             if league_name in MANUAL_COUNTRY_MAP:
@@ -98,13 +99,14 @@ async def compute_team_metrics(api_token, team_id, last=5):
     }
 
     # Endpoint para fixtures do time, com filtro 'Finished', ordenado por data descendente
+    # Inclui 'periods' para garantir que os tempos de jogo (HT) sejam capturados corretamente.
     url = (
         f"{BASE_URL}/fixtures"
         f"?api_token={api_token}"
         f"&filters=teams:{team_id},fixtureStates:{STATE_FINISHED_ID}"
         f"&sort=starting_at:desc"
         f"&per_page={last}"
-        f"&include=scores;corners;participants" # Incluir scores (FT/HT), corners e participants
+        f"&include=scores;corners;participants;periods" # Incluir periods para HT score
     )
     
     metrics = {
@@ -115,7 +117,7 @@ async def compute_team_metrics(api_token, team_id, last=5):
         "losses": 0,
         "escanteios": 0,
         "gols_ht": 0,
-        "total_games": 0 # Pode ser menor que 'last' se não houver 5 jogos
+        "total_games": 0 
     }
     
     try:
@@ -137,18 +139,19 @@ async def compute_team_metrics(api_token, team_id, last=5):
 
                 for f in historical_fixtures:
                     
-                    # Identificar o time se era Home ou Away
-                    # Busca o participante que corresponde ao team_id
+                    # 1. Identificar se o time era Home ou Away
                     is_home_game = next((p for p in f.get("participants", []) if p["id"] == team_id and p["meta"]["location"] == "home"), None)
                     
-                    # 1. Extrair Scores (FT e HT)
+                    # 2. Extrair Scores (FT e HT)
                     scores = f.get("scores", [])
                     
                     ft_score = next((s for s in scores if s["description"] == "FT"), None)
-                    ht_score = next((s for s in scores if s["description"] == "HT"), None)
                     
+                    # O score HT agora é extraído do array 'periods'
+                    ht_period = next((p for p in f.get("periods", []) if p["description"] == "1ST HALF"), None)
+
+                    # --- Análise FT ---
                     if ft_score:
-                        # Assumimos que o score e opponent_score estão corretos na API
                         if is_home_game:
                             gs = ft_score.get("score", 0)
                             gc = ft_score.get("opponent_score", 0)
@@ -167,14 +170,18 @@ async def compute_team_metrics(api_token, team_id, last=5):
                         else:
                             metrics["losses"] += 1
                             
-                    # 2. Extrair Gols HT
-                    if ht_score:
-                        if is_home_game:
-                            metrics["gols_ht"] += ht_score.get("score", 0)
-                        else: # Jogo Fora (Away)
-                            metrics["gols_ht"] += ht_score.get("opponent_score", 0)
+                    # --- Análise Gols HT (Usando 'periods') ---
+                    if ht_period and ht_period.get("scores"):
+                         ht_scores = ht_period.get("scores")
+                         if is_home_game:
+                             # Gols marcados no HT (score do time)
+                             metrics["gols_ht"] += next((s.get("score", 0) for s in ht_scores if s.get("participant_id") == team_id), 0)
+                         else: 
+                             # Gols marcados no HT (opponent_score do time)
+                             metrics["gols_ht"] += next((s.get("score", 0) for s in ht_scores if s.get("participant_id") != team_id), 0)
+
                     
-                    # 3. Extrair Escanteios
+                    # --- Análise Escanteios ---
                     corners = f.get("corners", [])
                     team_corners = next((c for c in corners if c.get("participant_id") == team_id), None)
                     if team_corners:
@@ -236,9 +243,10 @@ def decide_best_market(home_metrics, away_metrics):
     confidence_goals = 50
     suggestion_goals = "Sem sinal"
     
+    # Critérios ajustados para dar mais peso a Over 2.5
     if total_avg_goals >= 2.8:
         suggestion_goals = "Mais de 2.5 Gols (Over 2.5 FT)"
-        confidence_goals += int(min(total_avg_goals * 10, 40)) 
+        confidence_goals += int(min(total_avg_goals * 12, 49)) # Máx 99%
     elif total_avg_goals >= 2.0:
         suggestion_goals = "Mais de 1.5 Gols (Over 1.5 FT)"
         confidence_goals += int(min(total_avg_goals * 10, 30))
@@ -257,15 +265,16 @@ def decide_best_market(home_metrics, away_metrics):
     confidence_winner = 50
     suggestion_winner = "Sem sinal"
     
-    if form_diff > 40:
+    # Diferença de forma alta (ex: 80% vs 30% -> diff 50)
+    if form_diff > 45: 
         winner = "Casa" if home_form > away_form else "Fora"
         # Adiciona verificação de GS para garantir que o time tem poder ofensivo
         if winner == "Casa" and home_metrics["avg_gs"] > 1.8:
             suggestion_winner = "Vitória do Time da Casa (ML Home)"
-            confidence_winner = max(confidence_winner, 80) 
+            confidence_winner = min(99, max(confidence_winner, 60 + int(form_diff / 2))) # Até 85%
         elif winner == "Fora" and away_metrics["avg_gs"] > 1.8:
             suggestion_winner = "Vitória do Time Visitante (ML Away)"
-            confidence_winner = max(confidence_winner, 80)
+            confidence_winner = min(99, max(confidence_winner, 60 + int(form_diff / 2))) # Até 85%
             
     if confidence_winner > max_confidence:
         max_confidence = confidence_winner
@@ -274,19 +283,18 @@ def decide_best_market(home_metrics, away_metrics):
 
     # --- 3. ANÁLISE ESCANTEIOS (CORNERS) ---
     
-    # Escanteios For (time que ataca) + Escanteios For (do outro time)
     total_avg_corners = home_metrics["avg_corners_for"] + away_metrics["avg_corners_for"]
     
     confidence_corners = 50
     suggestion_corners = "Sem sinal"
     
     # Se a soma das médias for alta (ex: 5.5 + 5.5 = 11)
-    if total_avg_corners >= 10.5:
+    if total_avg_corners >= 10.8:
         suggestion_corners = "Mais de 10.5 Escanteios (Over 10.5 CR)"
-        confidence_corners += int(min((total_avg_corners - 10.5) * 10, 40)) 
+        confidence_corners += int(min((total_avg_corners - 10.0) * 8, 49)) # Máx 99%
     elif total_avg_corners >= 9.0:
         suggestion_corners = "Mais de 9.5 Escanteios (Over 9.5 CR)"
-        confidence_corners += int(min((total_avg_corners - 9.0) * 10, 30))
+        confidence_corners += int(min((total_avg_corners - 8.5) * 8, 35))
 
     if confidence_corners > max_confidence:
         max_confidence = confidence_corners
@@ -295,7 +303,6 @@ def decide_best_market(home_metrics, away_metrics):
         
     # --- 4. ANÁLISE GOLS NO PRIMEIRO TEMPO (HT GOALS) ---
     
-    # Média de Gols no HT: Somas das médias de Gols no HT marcados por cada time
     total_avg_ht_goals = home_metrics["avg_ht_goals_for"] + away_metrics["avg_ht_goals_for"]
     
     confidence_ht = 50
@@ -304,8 +311,7 @@ def decide_best_market(home_metrics, away_metrics):
     # Se a média total de Gols no HT for alta (ex: 0.8 + 0.8 = 1.6)
     if total_avg_ht_goals >= 1.5:
         suggestion_ht = "Mais de 1.5 Gols (Over 1.5 HT)"
-        # Aumenta confiança se a média for bem alta
-        confidence_ht += int(min((total_avg_ht_goals - 1.0) * 20, 40)) 
+        confidence_ht += int(min((total_avg_ht_goals - 1.0) * 25, 49)) # Máx 99%
     elif total_avg_ht_goals >= 0.8:
         suggestion_ht = "Mais de 0.5 Gols (Over 0.5 HT)"
         confidence_ht += int(min((total_avg_ht_goals - 0.5) * 20, 30))
@@ -314,13 +320,16 @@ def decide_best_market(home_metrics, away_metrics):
         max_confidence = confidence_ht
         best_suggestion = suggestion_ht
 
-    # Garante que a confiança fique entre 50% e 99%
-    final_confidence = min(99, max(0, max_confidence)) # Agora a confiança pode ir a 0
+    # Garante que a confiança fique entre 0% e 99%
+    final_confidence = min(99, max(0, max_confidence)) 
 
     return best_suggestion, final_confidence
 
 def kickoff_time_local(fixture, tz, return_datetime=False):
-    """Converte a string de horário UTC da API para horário local (BRT) e formata."""
+    """
+    Converte a string de horário UTC da API para horário local (BRT) e formata.
+    CORRIGIDO: Força o reconhecimento do 'starting_at' como UTC.
+    """
     
     starting_at_str = fixture.get("starting_at") 
     
@@ -328,12 +337,24 @@ def kickoff_time_local(fixture, tz, return_datetime=False):
         return datetime.now(tz) if return_datetime else "N/A"
         
     try:
-        # A API pode retornar datas sem segundos, por isso o slicing
-        if len(starting_at_str) > 16:
-             dt_utc = datetime.strptime(starting_at_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-        else: # Trata o formato sem segundos
-             dt_utc = datetime.strptime(starting_at_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
-             
+        # A SportMonks v3 usa o formato ISO 8601, que é tratado por 'fromisoformat' (Python 3.7+).
+        # Para garantir compatibilidade em ambientes mais antigos ou formatos variados da V3:
+
+        # 1. Limpeza da string: Remove 'Z' e qualquer milissegundo após o ponto (se houver)
+        if starting_at_str.endswith('Z'):
+            starting_at_str = starting_at_str[:-1]
+        if '.' in starting_at_str:
+            starting_at_str = starting_at_str.split('.')[0]
+
+        # 2. Tenta fazer o parse usando formatos comuns, garantindo que o fuso horário seja UTC
+        # Tenta o formato ISO 8601 completo (com 'T')
+        try:
+            dt_utc = datetime.strptime(starting_at_str, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            # Se falhar, tenta o formato com espaço (sem 'T')
+            dt_utc = datetime.strptime(starting_at_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            
+        # 3. Conversão para o fuso horário local (BRT)
         dt_local = dt_utc.astimezone(tz)
         
         if return_datetime:
@@ -346,5 +367,8 @@ def kickoff_time_local(fixture, tz, return_datetime=False):
             return dt_local.strftime("%H:%M — %d/%m")
             
     except Exception as e:
-        print(f"Erro ao processar data {starting_at_str}: {e}")
+        # Imprime o horário da API para depuração
+        print(f"❌ Erro ao processar data '{starting_at_str}' para timezone: {e}") 
+        # Retorna a data atual como um datetime local para garantir que o filtro não quebre
+        # Se for para retornar string, retorna erro
         return datetime.now(tz) if return_datetime else "Erro de data"
