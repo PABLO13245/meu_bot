@@ -2,6 +2,7 @@
 import asyncio
 import aiohttp
 import numpy as np
+import pytz # <--- CORREÇÃO AQUI: Importação de pytz adicionada
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Tuple, Optional
 
