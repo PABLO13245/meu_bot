@@ -25,7 +25,11 @@ bot = Bot(token=TELEGRAM_TOKEN)
 TOP_QTY = 7 # Quantidade de partidas por envio (limite de TOP Oportunidades)
 
 # Filtro mínimo de confiança (para aparecer na lista de oportunidades)
-MIN_CONFIDENCE = 65 
+# Reduzindo para 50% para garantir que jogos que passem no filtro de tempo sejam analisados.
+MIN_CONFIDENCE = 50 
+
+# Margem de tempo de segurança para evitar pegar jogos que já começaram ou começarão em segundos.
+MINUTES_BEFORE_KICKOFF = 2 
 
 # ----------------------------------------------------------------------
 # FUNÇÕES DE ANÁLISE E MENSAGEM
@@ -41,6 +45,7 @@ async def build_message(fixtures, api_token, qty=7):
         async def analyze_and_rate(fixture):
             participants = fixture.get("participants", [])
             if len(participants) < 2:
+                # DEBUG: Ignorar jogos sem 2 participantes
                 return None
             
             # Encontra IDs dos times (com base na localização 'home'/'away')
@@ -48,6 +53,7 @@ async def build_message(fixtures, api_token, qty=7):
             away_id = next((p["id"] for p in participants if p["meta"]["location"] == "away"), None)
 
             if not home_id or not away_id:
+                # DEBUG: Ignorar jogos onde home/away ID não está claro
                 return None
             
             # Análise de Métricas (Simulada)
@@ -61,6 +67,7 @@ async def build_message(fixtures, api_token, qty=7):
             
             # Filtro: Apenas sinais fortes (>= MIN_CONFIDENCE)
             if confidence < MIN_CONFIDENCE:
+                print(f"DEBUG: Jogo ignorado por baixa confiança ({confidence}% < {MIN_CONFIDENCE}%)")
                 return None
             
             fixture['suggestion'] = suggestion
@@ -162,28 +169,36 @@ async def run_analysis_send(qtd=TOP_QTY):
         
         # 3. FILTRO TEMPORAL E DE INÍCIO
         upcoming_fixtures = []
-        # Margem de segurança de 5 minutos (não considerar jogos que começam em menos de 5 min)
-        time_threshold = now_local + timedelta(minutes=5) 
+        # Margem de segurança de 2 minutos (MINUTES_BEFORE_KICKOFF)
+        time_threshold = now_local + timedelta(minutes=MINUTES_BEFORE_KICKOFF) 
 
+        print(f"DEBUG: Total de jogos encontrados pela API: {len(fixtures)}.")
+        
         for f in fixtures:
             kickoff_dt = kickoff_time_local(f, TZ, return_datetime=True)
+            home_name = next((p["name"] for p in f.get("participants", []) if p["meta"]["location"] == "home"), "Time Desconhecido")
+            away_name = next((p["name"] for p in f.get("participants", []) if p["meta"]["location"] == "away"), "Time Desconhecido")
             
-            # 3.1. Filtro de 48 horas (precisa ser antes do limite)
+            log_prefix = f"DEBUG FILTRO {home_name} x {away_name} ({kickoff_dt.strftime('%d/%m %H:%M')}): "
+
+            # 3.1. Filtro de 48 horas (precisa ser antes ou igual ao limite de 48h)
             if kickoff_dt > time_limit_48h:
+                print(f"{log_prefix} ELIMINADO: Jogo após 48h. (Limite: {time_limit_48h.strftime('%d/%m %H:%M')})")
                 continue
 
-            # 3.2. Filtro de JÁ COMEÇOU (precisa ser depois do limite)
+            # 3.2. Filtro de JÁ COMEÇOU (precisa ser depois do limite de 2 minutos)
             if kickoff_dt > time_threshold:
                  upcoming_fixtures.append(f)
-            # else: jogos que já passaram ou que começam em menos de 5 minutos são ignorados
+            else:
+                 print(f"{log_prefix} ELIMINADO: Jogo já começou ou está muito perto. (Threshold: {time_threshold.strftime('%H:%M')})")
 
-        print(f"DEBUG: Jogos dentro de 48h e não iniciados: {len(upcoming_fixtures)}.")
+        print(f"DEBUG: Jogos dentro de 48h e não iniciados (restantes): {len(upcoming_fixtures)}.")
         
         if not upcoming_fixtures:
             # Esta mensagem só será enviada se a API retornar jogos, mas NENHUM deles
             # passar nos filtros de 48h e 'não iniciado'.
             if CHAT_ID != "YOUR_CHAT_ID":
-                await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para as próximas 48h que ainda não começou.")
+                await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para as próximas 48h que ainda não começou e/ou passou pelo filtro de tempo.")
             return
             
         # 4. Análise, construção da mensagem e envio
