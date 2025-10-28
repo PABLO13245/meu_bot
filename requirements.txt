@@ -1,7 +1,8 @@
 requests
 schedule
 flask
-python-telegram-bot==20.3
+python-telegram-bot-
 pytz
 apscheduler
 aiohttp
+numpy
