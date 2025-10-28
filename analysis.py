@@ -79,20 +79,24 @@ async def fetch_upcoming_fixtures(api_token, start_date, per_page=100):
 
 async def compute_team_metrics(api_token, team_id, last=5):
     """
-    Simula a busca e cálculo de métricas de uma equipe.
-    (AWAIT NECESSÁRIO para simular latência de busca)
+    Simula a busca e cálculo de métricas de uma equipe, incluindo gols, escanteios e HT.
     """
     await asyncio.sleep(random.uniform(0.1, 0.5)) 
     
-    # Simulação: Retornamos dados simulados com variações
-    if random.random() < 0.1: # 10% de chance de ter um time ruim
+    # Simulação: Retornamos dados simulados
+    
+    if random.random() < 0.05: # 5% de chance de time ruim
         gols_marcados = random.randint(0, 5)
         gols_sofridos = random.randint(5, 10)
         vitorias = random.randint(0, 2)
-    else: # 90% de chance de ter um time mediano/bom
-        gols_marcados = random.randint(5, 10)
-        gols_sofridos = random.randint(3, 7)
-        vitorias = random.randint(2, 4)
+        escanteios = random.randint(15, 25) # Total em 5 jogos (média 3-5)
+        gols_ht = random.randint(0, 3) # Total em 5 jogos
+    else: # 95% de chance de time mediano/bom
+        gols_marcados = random.randint(7, 12) 
+        gols_sofridos = random.randint(3, 8) 
+        vitorias = random.randint(3, 5) 
+        escanteios = random.randint(30, 45) # Total em 5 jogos (média 6-9)
+        gols_ht = random.randint(3, 7) # Total em 5 jogos
         
     return {
         "team_id": team_id,
@@ -101,7 +105,10 @@ async def compute_team_metrics(api_token, team_id, last=5):
         "wins": vitorias,
         "avg_gs": gols_marcados / last,
         "avg_gc": gols_sofridos / last,
-        "form_score": (vitorias / last) * 100 
+        "form_score": (vitorias / last) * 100,
+        # NOVAS MÉTRICAS SIMULADAS
+        "avg_corners_for": escanteios / last,
+        "avg_ht_goals_for": gols_ht / last
     }
 
 
@@ -111,46 +118,108 @@ async def compute_team_metrics(api_token, team_id, last=5):
 
 def decide_best_market(home_metrics, away_metrics):
     """
-    Decide a melhor sugestão de aposta e calcula a confiança.
+    Decide a melhor sugestão de aposta e calcula a confiança, analisando múltiplos mercados.
     """
     
-    # 1. CÁLCULO DE FORÇA
+    best_suggestion = "Sem sinal forte — evite aposta"
+    max_confidence = 50 # Confiança base
+    
+    
+    # --- 1. ANÁLISE GERAL DE GOLS (FULL TIME) ---
+    
+    # Média de gols total esperado no jogo
     total_avg_goals = home_metrics["avg_gs"] + away_metrics["avg_gc"] + \
                       away_metrics["avg_gs"] + home_metrics["avg_gc"]
                       
     total_avg_goals /= 2 
     
+    
+    # Avaliação do mercado de gols (Over 1.5, Over 2.5)
+    confidence_goals = 50
+    suggestion_goals = "Sem sinal"
+    
+    if total_avg_goals >= 2.8:
+        suggestion_goals = "Mais de 2.5 Gols (Over 2.5 FT)"
+        confidence_goals += int(min(total_avg_goals * 10, 40)) 
+    elif total_avg_goals >= 2.0:
+        suggestion_goals = "Mais de 1.5 Gols (Over 1.5 FT)"
+        confidence_goals += int(min(total_avg_goals * 10, 30))
+        
+    if confidence_goals > max_confidence:
+        max_confidence = confidence_goals
+        best_suggestion = suggestion_goals
+
+
+    # --- 2. ANÁLISE VENCEDOR (1X2) ---
+    
     home_form = home_metrics["form_score"]
     away_form = away_metrics["form_score"]
-    
     form_diff = abs(home_form - away_form)
     
+    confidence_winner = 50
+    suggestion_winner = "Sem sinal"
     
-    # 2. DECISÃO (SIMPLIFICADA)
-    suggestion = "Sem sinal forte — evite aposta"
-    confidence = 50 
-    
-    # Analisando o mercado de Gols
-    if total_avg_goals >= 2.8:
-        suggestion = "Mais de 2.5 Gols (Over 2.5)"
-        confidence += int(min(total_avg_goals * 10, 40)) 
-    elif total_avg_goals >= 2.0:
-        suggestion = "Mais de 1.5 Gols (Over 1.5)"
-        confidence += int(min(total_avg_goals * 10, 30))
-        
-    # Analisando o mercado de Vencedor
     if form_diff > 40:
         winner = "Casa" if home_form > away_form else "Fora"
-        if winner == "Casa" and home_metrics["avg_gs"] > 2:
-            suggestion = f"Vitória do Time da Casa (ML Home)"
-            confidence = max(confidence, 80) 
+        if winner == "Casa" and home_metrics["avg_gs"] > 2.0:
+            suggestion_winner = "Vitória do Time da Casa (ML Home)"
+            confidence_winner = max(confidence_winner, 80) 
         elif winner == "Fora" and away_metrics["avg_gs"] > 1.8:
-            suggestion = f"Vitória do Time Visitante (ML Away)"
-            confidence = max(confidence, 80)
+            suggestion_winner = "Vitória do Time Visitante (ML Away)"
+            confidence_winner = max(confidence_winner, 80)
+            
+    if confidence_winner > max_confidence:
+        max_confidence = confidence_winner
+        best_suggestion = suggestion_winner
 
-    confidence = min(99, max(50, confidence))
 
-    return suggestion, confidence
+    # --- 3. ANÁLISE ESCANTEIOS (CORNERS) ---
+    
+    # Escanteios For (time que ataca) + Escanteios Against (time que sofre pressão/defende)
+    # Aqui vamos usar a média simples dos escanteios marcados por cada um
+    total_avg_corners = home_metrics["avg_corners_for"] + away_metrics["avg_corners_for"]
+    
+    confidence_corners = 50
+    suggestion_corners = "Sem sinal"
+    
+    # Se a soma das médias for alta (ex: 7 + 7 = 14)
+    if total_avg_corners >= 10.5:
+        suggestion_corners = "Mais de 10.5 Escanteios (Over 10.5 CR)"
+        confidence_corners += int(min((total_avg_corners - 10) * 10, 40)) # Aumenta 10% a cada corner extra
+    elif total_avg_corners >= 9.0:
+        suggestion_corners = "Mais de 9.5 Escanteios (Over 9.5 CR)"
+        confidence_corners += int(min((total_avg_corners - 9) * 10, 30))
+
+    if confidence_corners > max_confidence:
+        max_confidence = confidence_corners
+        best_suggestion = suggestion_corners
+        
+        
+    # --- 4. ANÁLISE GOLS NO PRIMEIRO TEMPO (HT GOALS) ---
+    
+    # Média de Gols no HT: Somas das médias de Gols no HT marcados por cada time
+    total_avg_ht_goals = home_metrics["avg_ht_goals_for"] + away_metrics["avg_ht_goals_for"]
+    
+    confidence_ht = 50
+    suggestion_ht = "Sem sinal"
+    
+    # Se a média total de Gols no HT for alta (ex: 0.8 + 0.8 = 1.6)
+    if total_avg_ht_goals >= 1.5:
+        suggestion_ht = "Mais de 1.5 Gols (Over 1.5 HT)"
+        # Aumenta confiança se a média for bem alta
+        confidence_ht += int(min((total_avg_ht_goals - 1.0) * 20, 40)) 
+    elif total_avg_ht_goals >= 0.8:
+        suggestion_ht = "Mais de 0.5 Gols (Over 0.5 HT)"
+        confidence_ht += int(min((total_avg_ht_goals - 0.5) * 20, 30))
+
+    if confidence_ht > max_confidence:
+        max_confidence = confidence_ht
+        best_suggestion = suggestion_ht
+
+    # Garante que a confiança fique entre 50% e 99%
+    final_confidence = min(99, max(50, max_confidence))
+
+    return best_suggestion, final_confidence
 
 def kickoff_time_local(fixture, tz, return_datetime=False):
     """Converte a string de horário UTC da API para horário local (BRT) e formata."""
