@@ -4,10 +4,12 @@ from datetime import datetime, timezone
 import pytz
 import sys
 import random
+import os # Novo import para ler variáveis de ambiente
 
-# CONFIGURAÇÃO: Insira seu token da API aqui.
-# Você também pode passar o token como argumento na linha de comando.
-API_TOKEN = "YOUR_SPORTMONKS_API_TOKEN" 
+# CONFIGURAÇÃO: O script agora tentará ler o token da variável de ambiente 'SPORTMONKS_API_TOKEN'.
+# Se não encontrar, ele usará o placeholder.
+ENV_TOKEN = os.environ.get('SPORTMONKS_API_TOKEN')
+API_TOKEN = ENV_TOKEN if ENV_TOKEN else "YOUR_SPORTMONKS_API_TOKEN" 
 
 # Configurações Base
 BASE_URL = "https://api.sportmonks.com/v3/football"
@@ -224,6 +226,7 @@ async def main(api_token):
     """Função principal para buscar, analisar e exibir as sugestões de apostas."""
     if api_token == "YOUR_SPORTMONKS_API_TOKEN":
         print("\n🚨 ERRO: Por favor, substitua 'YOUR_SPORTMONKS_API_TOKEN' pelo seu token real da SportMonks para executar a busca na API.")
+        # Se o token não foi encontrado em lugar nenhum, saímos aqui.
         return
 
     # Configuração de Fuso Horário Local (Brasil - São Paulo)
@@ -256,6 +259,7 @@ async def main(api_token):
 
         # 2.1. Simula as métricas dos times (em paralelo para o Home e Away)
         try:
+            # A chamada para compute_team_metrics simula a busca de dados de performance
             home_metrics, away_metrics = await asyncio.gather(
                 compute_team_metrics(api_token, home_team["id"]),
                 compute_team_metrics(api_token, away_team["id"])
@@ -268,6 +272,7 @@ async def main(api_token):
         suggestion, confidence = decide_best_market(home_metrics, away_metrics)
         
         # 2.3. Filtra resultados de alta confiança
+        # MANTENHO O 70% ORIGINAL AQUI, mas podemos reduzir para testar (ex: 50)
         if confidence < 50:
             return None
 
@@ -304,6 +309,7 @@ async def main(api_token):
     valid_results = [res for res in raw_results if res is not None]
     
     if not valid_results:
+        # Esta é a mensagem que você verá se o filtro de 70% for muito rigoroso
         print("\nNenhum jogo de alta confiança (>= 70%) encontrado para a data de hoje/próximos dias.")
         return
     
