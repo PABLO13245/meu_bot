@@ -2,7 +2,7 @@
 import asyncio
 import aiohttp
 import numpy as np
-import pytz # <--- CORREÇÃO AQUI: Importação de pytz adicionada
+import pytz 
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Tuple, Optional
 
@@ -17,16 +17,42 @@ STATE_FINISHED_ID = "FINISHED"
 # PL: Premier League, PD: La Liga, SA: Serie A, BL1: Bundesliga, PPL: Primeira Liga (Portugal)
 COMPETITION_CODES = ["PL", "PD", "SA", "BL1", "PPL"] 
 
+# Mapeamento de códigos de área de 3 letras (Alpha-3) para códigos de bandeira de 2 letras (Alpha-2)
+# Adicionei mais códigos comuns (FRA, NLD) para maior robustez.
+AREA_CODE_MAP = {
+    "ENG": "GB", # Reino Unido (para Premier League)
+    "ESP": "ES", # Espanha (para La Liga)
+    "ITA": "IT", # Itália (para Serie A)
+    "DEU": "DE", # Alemanha (para Bundesliga)
+    "GER": "DE", # Alemanha (código alternativo)
+    "POR": "PT", # Portugal (para Primeira Liga)
+    "FRA": "FR", # França (Ligue 1)
+    "NLD": "NL", # Holanda (Eredivisie)
+    "BEL": "BE", # Bélgica
+}
+
+
 # ======================================================================
 # FUNÇÕES DE UTILIDADE E CONFIGURAÇÃO
 # ======================================================================
 
 def get_flag_emoji(country_code: str) -> str:
-    """Converte o código de país (ISO 3166-1 alpha-2) em emoji de bandeira."""
-    if country_code is None or len(country_code) != 2:
+    """Converte o código de país (ISO 3166-1 alpha-2) em emoji de bandeira,
+       mapeando códigos de 3 letras (Alpha-3) se necessário."""
+    if not country_code:
         return ""
+        
+    code = country_code.upper()
+    
+    if len(code) == 3:
+        # Tenta mapear o código de 3 letras (Area Code) para 2 letras (ISO-2)
+        code = AREA_CODE_MAP.get(code, "") 
+        
+    if len(code) != 2:
+        return ""
+        
     # Emojis de bandeira são gerados a partir de 2 caracteres regionais:
-    return "".join(chr(0x1F1E6 + ord(char) - ord('A')) for char in country_code.upper())
+    return "".join(chr(0x1F1E6 + ord(char) - ord('A')) for char in code)
 
 
 async def fetch_with_retry(session: aiohttp.ClientSession, url: str, api_token: str) -> Optional[Dict[str, Any]]:
@@ -135,25 +161,28 @@ async def fetch_upcoming_fixtures(api_token: str, per_page: int = 100) -> List[D
                         continue
                         
                     # Mapeamento da estrutura football-data.org para Sportmonks
+                    # O código de área (e.g., 'ITA') é usado como código do país para a bandeira
+                    area_code = m["area"]["code"]
+                    
                     mapped_fixture = {
                         "id": m.get("id"),
                         "starting_at": m.get("utcDate"), # Data e hora UTC
                         "league": {
                             "name": m["competition"]["name"],
-                            "country": {"code": m["area"]["code"]} # Usa o código da área (ex: "ESP")
+                            "country": {"code": area_code} 
                         },
                         "participants": [
                             {
                                 "id": m["homeTeam"]["id"],
                                 "name": m["homeTeam"]["name"],
                                 "meta": {"location": "home"},
-                                "country": {"code": m["area"]["code"]} # Usa código da área para bandeira
+                                "country": {"code": area_code} 
                             },
                             {
                                 "id": m["awayTeam"]["id"],
                                 "name": m["awayTeam"]["name"],
                                 "meta": {"location": "away"},
-                                "country": {"code": m["area"]["code"]}
+                                "country": {"code": area_code}
                             }
                         ]
                     }
