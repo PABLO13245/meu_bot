@@ -61,8 +61,8 @@ async def build_message(fixtures, api_token, qtd=7):
             # Análise de Métricas (REAL)
             # compute_team_metrics agora usa aiohttp
             hm, am = await asyncio.gather(
-                compute_team_metrics(api_token, home_id, last=5), 
-                compute_team_metrics(api_token, away_id, last=5)
+                compute_team_metrics(api_token, home_id, last=3), 
+                compute_team_metrics(api_token, away_id, last=3)
             )
 
             # decide_best_market agora escolhe o melhor mercado entre todos (Gols FT, Vencedor, Escanteios, Gols HT)
