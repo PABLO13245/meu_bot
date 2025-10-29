@@ -1,4 +1,4 @@
-import os
+Import os
 import asyncio
 from datetime import datetime, timedelta
 import pytz
@@ -15,6 +15,29 @@ from analysis import (
     kickoff_time_local,
     get_flag_emoji
 )
+
+# ----------------------------------------------------------------------
+# 🌍 NOVO: MAPEAMENTO GLOBAL DE LIGAS COM CÓDIGO (football-data.org) E BANDEIRA
+# ----------------------------------------------------------------------
+# Este mapeamento será crucial no 'analysis.py' para a função 'fetch_upcoming_fixtures'
+# e também para a função 'get_flag_emoji'.
+LEAGUE_MAP: Dict[str, Dict[str, Any]] = {
+    "WC": {"name": "FIFA World Cup", "code": "WC", "country": "world"}, # Exemplo: 2000
+    "CL": {"name": "UEFA Champions League", "code": "CL", "country": "europe"}, # Exemplo: 2001
+    "BL1": {"name": "Bundesliga", "code": "BL1", "country": "DE"}, # Exemplo: 2002
+    "DED": {"name": "Eredivisie", "code": "DED", "country": "NL"}, # Exemplo: 2003
+    "BSA": {"name": "Campeonato Brasileiro Série A", "code": "BSA", "country": "BR"}, # Exemplo: 2013
+    "PD": {"name": "Primera Division (La Liga)", "code": "PD", "country": "ES"}, # Exemplo: 2014
+    "FL1": {"name": "Ligue 1", "code": "FL1", "country": "FR"}, # Exemplo: 2015
+    "ELC": {"name": "Championship", "code": "ELC", "country": "EN"}, # Exemplo: 2016
+    "PPL": {"name": "Primeira Liga (Portugal)", "code": "PPL", "country": "PT"}, # Exemplo: 2017
+    "EC": {"name": "European Championship", "code": "EC", "country": "europe"}, # Exemplo: 2018
+    "SA": {"name": "Serie A (Itália)", "code": "SA", "country": "IT"}, # Exemplo: 2019
+    "PL": {"name": "Premier League (Inglaterra)", "code": "PL", "country": "EN"}, # Exemplo: 2021
+    # Nota: Os códigos 'WC', 'CL', etc., são a chave de acesso. O 'code' interno é para o football-data.org
+    # Você precisará usar os IDs numéricos (2000, 2001, etc.) no 'analysis.py' para a busca.
+}
+# ----------------------------------------------------------------------
 
 # CONFIGURAÇÕES via ENV (Valores default usados se a ENV falhar)
 # SUBSTITUA ESTES VALORES ANTES DE RODAR
@@ -77,8 +100,8 @@ async def build_top_n_message(top_fixtures: List[Dict[str, Any]]) -> str:
     now = datetime.now(TZ)
     
     header = (
-        f"🚨 *ALERTA DE OPORTUNIDADES (TOP {len(top_fixtures)}) – {now.strftime('%d/%m/%Y %H:%M')}*\n"
-        f"🔎 *Próximas {HOURS_LIMIT} Horas*\n"
+        f"🚨 ALERTA DE OPORTUNIDADES (TOP {len(top_fixtures)}) – {now.strftime('%d/%m/%Y %H:%M')}\n"
+        f"🔎 Próximas {HOURS_LIMIT} Horas\n"
         f"──────────────────────────────\n"
     )
     
@@ -103,11 +126,11 @@ async def build_top_n_message(top_fixtures: List[Dict[str, Any]]) -> str:
         confidence = f.get('confidence', 0)
 
         part = (
-            f"{i+1}.** ⚽ *{home_name}* x *{away_name}*\n"
+            f"{i+1}.** ⚽ {home_name} x {away_name}\n"
             f"   🏆 {league_flag} {league_name}\n"
             f"   🕒 {kickoff_local} (BRT)\n"
-            f"   🔥 *Aposta:* {suggestion}\n"
-            f"   📊 *Confiança:* {confidence}%\n"
+            f"   🔥 Aposta: {suggestion}\n"
+            f"   📊 Confiança: {confidence}%\n"
         )
         message_parts.append(part)
     
@@ -133,8 +156,10 @@ async def run_analysis_send():
     print(f"DEBUG: Buscando jogos futuros. Limite de {HOURS_LIMIT}h: {time_limit_24h.strftime('%d/%m %H:%M')} (BRT)")
 
     try:
-        # 2. Busca fixtures 
-        fixtures = await fetch_upcoming_fixtures(API_TOKEN, per_page=200) 
+        # 2. Busca fixtures – Passamos o mapeamento de ligas para o analysis.py usar.
+        #    IMPORTANTE: Seu analysis.py precisará ser atualizado para receber e usar esta lista.
+        league_ids_to_fetch = [2000, 2001, 2002, 2003, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2021] # IDs de exemplo (precisam ser os IDs reais da API)
+        fixtures = await fetch_upcoming_fixtures(API_TOKEN, league_ids=league_ids_to_fetch, per_page=200) 
         
         if not fixtures:
             return
