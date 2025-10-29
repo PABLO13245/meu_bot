@@ -11,19 +11,38 @@ from typing import Dict, Any, List, Tuple, Optional
 BASE_URL = "https://api.football-data.org/v4"
 STATE_FINISHED_ID = "FINISHED"
 
-# Dicionário de Códigos de Competição (Seu plano Free)
-COMPETITION_CODES = [
-    "PL", "PD", "SA", "BL1", "PPL",  # Ligas Top
-    "WC", "CL", "DED", "BSA", "FL1", "ELC", "EC" # Copas e Ligas Adicionais
-] 
+# ----------------------------------------------------------------------
+# 🌍 NOVO: MAPEAMENTO GLOBAL DE LIGAS (Ligas e Copas incluídas)
+# ----------------------------------------------------------------------
+# Chave: Código curto | Valor: ID numérico na API (football-data.org) e código de país/área
+# IMPORTANTE: A API v4 usa o endpoint /competitions/{id}/matches
+LEAGUE_MAP: Dict[str, Dict[str, Any]] = {
+    # Chave | ID numérico | Código de Área/País
+    "WC": {"id": 2000, "name": "FIFA World Cup", "area": "WORLD", "country_code": "WW"},
+    "CL": {"id": 2001, "name": "UEFA Champions League", "area": "EUR", "country_code": "EU"},
+    "BL1": {"id": 2002, "name": "Bundesliga", "area": "GER", "country_code": "DE"},
+    "DED": {"id": 2003, "name": "Eredivisie", "area": "NLD", "country_code": "NL"},
+    "PD": {"id": 2014, "name": "Primera Division (La Liga)", "area": "ESP", "country_code": "ES"},
+    "FL1": {"id": 2015, "name": "Ligue 1", "area": "FRA", "country_code": "FR"},
+    "ELC": {"id": 2016, "name": "Championship", "area": "ENG", "country_code": "GB"}, # Inglaterra 2ª Divisão
+    "PPL": {"id": 2017, "name": "Primeira Liga (Portugal)", "area": "POR", "country_code": "PT"},
+    "EC": {"id": 2018, "name": "European Championship", "area": "EUR", "country_code": "EU"},
+    "SA": {"id": 2019, "name": "Serie A (Itália)", "area": "ITA", "country_code": "IT"},
+    "PL": {"id": 2021, "name": "Premier League (Inglaterra)", "area": "ENG", "country_code": "GB"},
+    # Ligas que precisam ser adicionadas manualmente se não estiverem no plano (BSA é a principal)
+    "BSA": {"id": 2013, "name": "Campeonato Brasileiro Série A", "area": "BRA", "country_code": "BR"},
+    # Nota: IDs são exemplos, você deve CONFIRMAR os IDs exatos no seu plano da API.
+}
 
-# Mapeamento de códigos de área
+# Lista de IDs que serão buscados no fetch_upcoming_fixtures
+COMPETITION_IDS = [data["id"] for data in LEAGUE_MAP.values()]
+
+# Mapeamento de códigos de área (Atualizado para incluir 'WW' e 'EU')
 AREA_CODE_MAP = {
     "ENG": "GB", "ESP": "ES", "ITA": "IT", "DEU": "DE", "GER": "DE", 
     "POR": "PT", "BRA": "BR", "FRA": "FR", "NLD": "NL", "BEL": "BE", 
     "GBR": "GB", "WORLD": "WW", "EUR": "EU",
 }
-
 
 # ======================================================================
 # FUNÇÕES DE UTILIDADE E CONFIGURAÇÃO
@@ -35,12 +54,15 @@ def get_flag_emoji(country_code: str) -> str:
         return "🌎"
         
     code = country_code.upper()
-    if len(code) == 3 or code == "WORLD" or code == "EUR":
+    # O código pode vir da API como 3 letras (e.g., GER) ou como código de competição (e.g., EU)
+    # A prioridade é mapear para o código de 2 letras da bandeira (e.g., DE)
+    if len(code) == 3 or code in ["WORLD", "EUR"]:
         code = AREA_CODE_MAP.get(code, "WW")
         
     if len(code) != 2:
         return "🌎"
         
+    # Converte código de 2 letras (ISO 3166-1 alpha-2) para emoji de bandeira
     return "".join(chr(0x1F1E6 + ord(char) - ord('A')) for char in code)
 
 
@@ -94,21 +116,27 @@ async def fetch_with_retry(session: aiohttp.ClientSession, url: str, api_token: 
 # FUNÇÕES DE BUSCA DE FIXTURES E MÉTRICAS
 # ======================================================================
 
-async def fetch_upcoming_fixtures(api_token: str, per_page: int = 200) -> List[Dict[str, Any]]:
+# ATUALIZADO: Agora recebe league_ids para buscar Múltiplas Ligas
+async def fetch_upcoming_fixtures(api_token: str, league_ids: Optional[List[int]] = None, per_page: int = 200) -> List[Dict[str, Any]]:
     """
-    Busca jogos futuros na API do football-data.org (para hoje e amanhã).
+    Busca jogos futuros na API do football-data.org usando IDs de competição.
     """
     now_utc = datetime.now(timezone.utc)
     date_from = now_utc.strftime("%Y-%m-%d")
     date_to = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
 
+    # Se league_ids não for passado, usa a lista padrão de IDs que definimos
+    if league_ids is None:
+        league_ids = COMPETITION_IDS
+
     all_fixtures: List[Dict[str, Any]] = []
 
     async with aiohttp.ClientSession() as session:
         
-        for comp_code in COMPETITION_CODES:
+        # Faz uma chamada para CADA ID de competição
+        for comp_id in league_ids:
             url = (
-                f"{BASE_URL}/competitions/{comp_code}/matches"
+                f"{BASE_URL}/competitions/{comp_id}/matches"
                 f"?dateFrom={date_from}&dateTo={date_to}"
                 f"&status=SCHEDULED,IN_PLAY,PAUSED" 
             )
@@ -116,33 +144,45 @@ async def fetch_upcoming_fixtures(api_token: str, per_page: int = 200) -> List[D
             data = await fetch_with_retry(session, url, api_token)
             
             if data and data.get("matches"):
+                # Filtra o mapeamento para obter o código de país da liga
+                comp_info = next((info for info in LEAGUE_MAP.values() if info["id"] == comp_id), None)
+                country_code = comp_info.get("country_code", "WW") if comp_info else "WW"
+                comp_name = comp_info.get("name", "Desconhecida") if comp_info else "Desconhecida"
+                
+                print(f"DEBUG: Buscando jogos da liga ID {comp_id} ({comp_name})...")
+
                 for m in data["matches"]:
                     if m.get('status') in ['FINISHED', 'POSTPONED', 'CANCELED']:
                         continue
                         
-                    area_code = m["area"]["code"]
+                    # Usa o código de país do mapeamento para consistência com get_flag_emoji
+                    # Nota: Mapeei o country_code (2 letras) para a bandeira
                     
                     mapped_fixture = {
                         "id": m.get("id"),
                         "starting_at": m.get("utcDate"), 
                         "league": {
-                            "name": m["competition"]["name"],
-                            "country": {"code": area_code} 
+                            "name": comp_name, # Usa o nome do mapeamento global para consistência
+                            "country": {"code": country_code} 
                         },
                         "participants": [
-                            {"id": m["homeTeam"]["id"], "name": m["homeTeam"]["name"], "meta": {"location": "home"}, "country": {"code": area_code}},
-                            {"id": m["awayTeam"]["id"], "name": m["awayTeam"]["name"], "meta": {"location": "away"}, "country": {"code": area_code}}
+                            {"id": m["homeTeam"]["id"], "name": m["homeTeam"]["name"], "meta": {"location": "home"}, "country": {"code": country_code}},
+                            {"id": m["awayTeam"]["id"], "name": m["awayTeam"]["name"], "meta": {"location": "away"}, "country": {"code": country_code}}
                         ]
                     }
                     all_fixtures.append(mapped_fixture)
-    
-    print(f"✅ Jogos futuros encontrados (Total): {len(all_fixtures)}")
+            
+            # ATENÇÃO: Adicione um delay se o seu plano GRATUITO for muito restrito
+            # await asyncio.sleep(0.5)
+
+    print(f"✅ Jogos futuros encontrados (Total de jogos únicos): {len(all_fixtures)}")
     return all_fixtures
 
 
 async def compute_team_metrics(api_token: str, team_id: int, last: int = 5) -> Dict[str, Any]:
     """
     Busca os últimos 'last' jogos do time na API para calcular métricas reais.
+    (Nenhuma mudança nessa função, pois ela depende apenas do ID do time.)
     """
     
     DEFAULT_METRICS_ZERO = {
@@ -228,6 +268,7 @@ async def compute_team_metrics(api_token: str, team_id: int, last: int = 5) -> D
 def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any]) -> Tuple[str, int]:
     """
     Decide a melhor sugestão de aposta, analisando múltiplos mercados e retornando o de maior confiança.
+    (Nenhuma mudança nesta função)
     """
     
     suggestions: List[Tuple[str, int]] = []
@@ -369,6 +410,7 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
 def kickoff_time_local(fixture: Dict[str, Any], tz: pytz.BaseTzInfo, return_datetime: bool = False) -> Any:
     """
     Converte a string de horário UTC da API para horário local (BRT) e formata.
+    (Nenhuma mudança nesta função)
     """
     
     starting_at_str = fixture.get("starting_at") 
