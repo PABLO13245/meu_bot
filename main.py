@@ -9,13 +9,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from analysis import (
     fetch_upcoming_fixtures,
     compute_team_metrics,
-    decide_best_market, # Esta função agora retorna o melhor de todos os mercados
+    decide_best_market, 
     kickoff_time_local,
     get_flag_emoji
 )
 
 # CONFIGURAÇÕES via ENV (Valores default usados se a ENV falhar)
-# SUBSTITUA ESTES VALORES ANTES DE RODAR
+# Lembre-se de substituir "YOUR_FOOTBALLDATA_API_TOKEN" pelo seu token real
 API_TOKEN = os.getenv("API_TOKEN", "YOUR_FOOTBALLDATA_API_TOKEN") 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_TOKEN") 
 CHAT_ID = os.getenv("CHAT_ID", "YOUR_CHAT_ID")                     
@@ -24,9 +24,10 @@ TZ = pytz.timezone("America/Sao_Paulo")
 # Bot do Telegram
 bot = Bot(token=TELEGRAM_TOKEN)
 
-# Filtro mínimo de confiança (para QUALQUER aposta ser considerada)
-# Aumentado para 65% para garantir um "TOP 1" de alta qualidade
-MIN_CONFIDENCE = 65 
+# NOVAS CONFIGURAÇÕES DE FILTRO
+HOURS_LIMIT = 24 # Limite de tempo de análise (24 horas)
+TOP_QTY = 4      # Quantidade de jogos para enviar
+MIN_CONFIDENCE = 65 # Filtro mínimo de confiança (para QUALQUER aposta ser considerada)
 
 # Margem de tempo de segurança para evitar pegar jogos que já começaram ou começarão em segundos.
 MINUTES_BEFORE_KICKOFF = 2 
@@ -55,7 +56,7 @@ async def analyze_and_rate_fixture(fixture, api_token):
         compute_team_metrics(api_token, away_id, last=5)
     )
 
-    # decide_best_market: Retorna a melhor sugestão entre todos os mercados (Gols FT, 1X2, BTTS, HT, Corners)
+    # decide_best_market: Retorna a melhor sugestão entre todos os mercados
     suggestion, confidence = decide_best_market(hm, am)
     
     # Filtro: Apenas sinais fortes (>= MIN_CONFIDENCE)
@@ -71,56 +72,54 @@ async def analyze_and_rate_fixture(fixture, api_token):
     return fixture
 
 
-async def build_single_best_message(best_fixture):
-    """Constrói a mensagem final APENAS para a melhor aposta."""
+async def build_top_n_message(top_fixtures: List[Dict[str, Any]]):
+    """Constrói a mensagem final consolidada para os TOP N jogos."""
     
     now = datetime.now(TZ)
     
     header = (
-        f"🚨 *ALERTA DE OPORTUNIDADE (TOP 1) – {now.strftime('%d/%m/%Y %H:%M')}*\n"
+        f"🚨 *ALERTA DE OPORTUNIDADES (TOP {len(top_fixtures)}) – {now.strftime('%d/%m/%Y %H:%M')}*\n"
+        f"🔎 *Próximas {HOURS_LIMIT} Horas*\n"
         f"──────────────────────────────\n"
     )
     
-    f = best_fixture
-    participants = f.get("participants", [])
-    home = next((p for p in participants if p["meta"]["location"] == "home"), {})
-    away = next((p for p in participants if p["meta"]["location"] == "away"), {})
+    message_parts = []
+    
+    for i, f in enumerate(top_fixtures):
+        participants = f.get("participants", [])
+        home = next((p for p in participants if p["meta"]["location"] == "home"), {})
+        away = next((p for p in participants if p["meta"]["location"] == "away"), {})
 
-    # Dados da partida
-    league_data = f.get("league", {})
-    league_name = league_data.get("name", "Desconhecida")
-    # O código de país agora vem do mapeamento no analysis.py
-    league_country_code = league_data.get("country", {}).get("code", "xx")
-    
-    kickoff_local = kickoff_time_local(f, TZ)
-    
-    # Emoji da bandeira da liga (País)
-    league_flag = get_flag_emoji(league_country_code)
-    
-    home_name = home.get("name", "Casa")
-    away_name = away.get("name", "Fora")
-    
-    suggestion = f.get('suggestion', 'N/A')
-    confidence = f.get('confidence', 0)
+        league_data = f.get("league", {})
+        league_name = league_data.get("name", "Desconhecida")
+        league_country_code = league_data.get("country", {}).get("code", "xx")
+        
+        kickoff_local = kickoff_time_local(f, TZ)
+        league_flag = get_flag_emoji(league_country_code)
+        
+        home_name = home.get("name", "Casa")
+        away_name = away.get("name", "Fora")
+        
+        suggestion = f.get('suggestion', 'N/A')
+        confidence = f.get('confidence', 0)
 
-    # Mensagem final focada na Aposta Única
-    part = (
-        f"⚽ *{home_name}* x *{away_name}*\n"
-        f"🏆 {league_flag} {league_name}\n"
-        f"🕒 Início: {kickoff_local} (BRT)\n\n"
-        f"🔥 *MELHOR SUGESTÃO GERAL:*\n"
-        f"   *{suggestion}*\n"
-        f"📊 *Confiança:* {confidence}%\n"
-        f"📅 Próximas 24h\n"
-    )
+        # Formato de cada jogo
+        part = (
+            f"{i+1}.** ⚽ *{home_name}* x *{away_name}*\n"
+            f"   🏆 {league_flag} {league_name}\n"
+            f"   🕒 {kickoff_local} (BRT)\n"
+            f"   🔥 *Aposta:* {suggestion}\n"
+            f"   📊 *Confiança:* {confidence}%\n"
+        )
+        message_parts.append(part)
     
     footer = "\n_Aposte com responsabilidade. Análise baseada em performance histórica._"
     
-    return header + part + footer
+    return header + "\n".join(message_parts) + footer
 
 
 async def run_analysis_send():
-    """Executa o ciclo completo de busca, filtro, análise e ENVIO DA MELHOR APOSTA."""
+    """Executa o ciclo completo de busca, filtro, análise e ENVIO DAS MELHORES APOSTAS."""
     
     if API_TOKEN == "YOUR_FOOTBALLDATA_API_TOKEN":
         print("\n🚨 ERRO: Token da API (football-data.org) não configurado. Abortando execução.")
@@ -129,14 +128,14 @@ async def run_analysis_send():
     if CHAT_ID == "YOUR_CHAT_ID" or TELEGRAM_TOKEN == "YOUR_TELEGRAM_TOKEN":
         print("\n🚨 ERRO: CHAT_ID ou TELEGRAM_TOKEN não configurados. A análise será executada, mas a mensagem não será enviada.")
         
-    # 1. Definir o range de tempo (24H)
+    # 1. Definir o range de tempo (AGORA 24 HORAS)
     now_local = datetime.now(TZ)
-    time_limit_48h = now_local + timedelta(hours=24)
+    time_limit_24h = now_local + timedelta(hours=HOURS_LIMIT)
     
-    print(f"DEBUG: Buscando jogos futuros. Limite de 48h: {time_limit_48h.strftime('%d/%m %H:%M')} (BRT)")
+    print(f"DEBUG: Buscando jogos futuros. Limite de {HOURS_LIMIT}h: {time_limit_24h.strftime('%d/%m %H:%M')} (BRT)")
 
     try:
-        # 2. Busca fixtures (já filtrando todas as ligas configuradas no analysis.py)
+        # 2. Busca fixtures (já filtrando hoje e amanhã no analysis.py)
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, per_page=200) 
         
         if not fixtures:
@@ -144,25 +143,25 @@ async def run_analysis_send():
                 await bot.send_message(chat_id=CHAT_ID, text=f"⚠ A API não retornou jogos futuros para o período de análise.")
             return
         
-        # 3. FILTRO TEMPORAL E DE INÍCIO
+        # 3. FILTRO TEMPORAL E DE INÍCIO (24 HORAS)
         upcoming_fixtures = []
         time_threshold = now_local + timedelta(minutes=MINUTES_BEFORE_KICKOFF) 
 
         for f in fixtures:
             kickoff_dt = kickoff_time_local(f, TZ, return_datetime=True)
             
-            # Filtro de 48 horas e Filtro de JÁ COMEÇOU
-            if time_threshold < kickoff_dt <= time_limit_48h:
+            # Filtro de 24 horas e Filtro de JÁ COMEÇOU
+            if time_threshold < kickoff_dt <= time_limit_24h:
                 upcoming_fixtures.append(f)
 
-        print(f"DEBUG: Jogos dentro de 48h e não iniciados (restantes): {len(upcoming_fixtures)}.")
+        print(f"DEBUG: Jogos dentro de {HOURS_LIMIT}h e não iniciados (restantes): {len(upcoming_fixtures)}.")
         
         if not upcoming_fixtures:
             if CHAT_ID != "YOUR_CHAT_ID":
-                await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para as próximas 48h que ainda não começou e/ou passou pelo filtro de tempo.")
+                await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para as próximas {HOURS_LIMIT}h que ainda não começou e/ou passou pelo filtro de tempo.")
             return
             
-        # 4. Analisa todos os jogos em paralelo e encontra o melhor
+        # 4. Analisa todos os jogos em paralelo
         analysis_tasks = [analyze_and_rate_fixture(f, API_TOKEN) for f in upcoming_fixtures]
         
         # Executa a análise para todos os jogos e filtra os nulos (confiança < MIN_CONFIDENCE)
@@ -170,7 +169,7 @@ async def run_analysis_send():
         analyzed_fixtures = [f for f in analyzed_fixtures_raw if f is not None]
 
         if not analyzed_fixtures:
-            message = f"⚠ Nenhuma partida TOP encontrada nas próximas 48h, com confiança acima de {MIN_CONFIDENCE}%."
+            message = f"⚠ Nenhuma partida TOP encontrada nas próximas {HOURS_LIMIT}h, com confiança acima de {MIN_CONFIDENCE}%."
             if CHAT_ID != "YOUR_CHAT_ID":
                 await bot.send_message(chat_id=CHAT_ID, text=message)
             else:
@@ -180,17 +179,17 @@ async def run_analysis_send():
         # 5. Ordena pela confiança (do maior para o menor)
         analyzed_fixtures.sort(key=lambda x: (x.get('confidence', 0), x.get("starting_at", "")), reverse=True)
         
-        # 6. Pega APENAS o melhor jogo (o primeiro da lista)
-        best_fixture = analyzed_fixtures[0]
+        # 6. Pega APENAS os TOP N jogos (os 4 primeiros da lista)
+        top_fixtures = analyzed_fixtures[:TOP_QTY]
 
         # 7. Constrói a mensagem e envia
-        message = await build_single_best_message(best_fixture)
+        message = await build_top_n_message(top_fixtures)
         
         if CHAT_ID != "YOUR_CHAT_ID" and TELEGRAM_TOKEN != "YOUR_TELEGRAM_TOKEN":
              # Parse mode é Markdown
             await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
         else:
-            print("--- MENSAGEM ÚNICA PRONTA (NÃO ENVIADA) ---")
+            print(f"--- MENSAGEM TOP {len(top_fixtures)} PRONTA (NÃO ENVIADA) ---")
             print(message)
             print("-----------------------------------")
         
@@ -204,7 +203,7 @@ async def run_analysis_send():
             pass
             
 # ----------------------------------------------------------------------
-# SCHEDULER E EXECUÇÃO PRINCIPAL (Mantido do original)
+# SCHEDULER E EXECUÇÃO PRINCIPAL 
 # ----------------------------------------------------------------------
 
 def start_scheduler():
@@ -212,13 +211,14 @@ def start_scheduler():
     scheduler = AsyncIOScheduler(timezone=TZ)
     
     # Horários de execução (BRT)
+    # Mantidos 4 horários para garantir a cobertura das 24h
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=0, minute=0) # Meia-noite
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=6, minute=0) # Manhã
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=16, minute=0) # Tarde
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=19, minute=0) # Noite
     
     scheduler.start()
-    print("✅ Agendador iniciado para 06:00, 12:00, e 19:00 (BRT).")
+    print("✅ Agendador iniciado para 00:00, 06:00, 16:00, e 19:00 (BRT).")
 
 async def main():
     """Função principal que mantém o bot rodando."""
