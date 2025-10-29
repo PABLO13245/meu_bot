@@ -29,7 +29,7 @@ bot = Bot(token=TELEGRAM_TOKEN)
 # CONFIGURAÇÕES DE FILTRO
 HOURS_LIMIT = 24 # Limite de tempo de análise (24 horas)
 TOP_QTY = 4      # Quantidade de jogos para enviar
-MIN_CONFIDENCE = 65 # Filtro mínimo de confiança (para QUALQUER aposta ser considerada)
+MIN_CONFIDENCE = 50 # Filtro mínimo de confiança (para QUALQUER aposta ser considerada)
 
 # Margem de tempo de segurança
 MINUTES_BEFORE_KICKOFF = 2 
