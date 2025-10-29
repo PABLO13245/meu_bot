@@ -23,7 +23,7 @@ TZ = pytz.timezone("America/Sao_Paulo")
 
 # Bot do Telegram
 bot = Bot(token=TELEGRAM_TOKEN)
-TOP_QTY = 7 # Quantidade de partidas por envio (limite de TOP Oportunidades)
+TOP_QTY = 4 # Quantidade de partidas por envio (limite de TOP Oportunidades)
 
 # Filtro mínimo de confiança (para aparecer na lista de oportunidades)
 # 0% para "Sem Dados" será filtrado aqui.
@@ -36,7 +36,7 @@ MINUTES_BEFORE_KICKOFF = 2
 # FUNÇÕES DE ANÁLISE E MENSAGEM
 # ----------------------------------------------------------------------
 
-async def build_message(fixtures, api_token, qtd=7):
+async def build_message(fixtures, api_token, qtd=4):
     """Analisa as fixtures, ordena pela confiança e constrói a mensagem final."""
     
     # 1. Analisa todos os jogos em paralelo
@@ -95,7 +95,7 @@ async def build_message(fixtures, api_token, qtd=7):
     
     # Altera o cabeçalho para refletir o novo filtro
     header = (
-        f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS NAS PRÓXIMAS 48H)\n"
+        f"📅 Análises — {now.strftime('%d/%m/%Y')} (JOGOS NAS PRÓXIMAS 24H)\n"
         f"⏱ Atualizado — {now.strftime('%H:%M')} (BRT)\n\n"
         f"🔥 Top {qtd} Oportunidades (Sinais > {MIN_CONFIDENCE}%) 🔥\n\n"
     )
@@ -161,7 +161,7 @@ async def run_analysis_send(qtd=TOP_QTY):
         
     # 1. Definir o range de tempo (48h)
     now_local = datetime.now(TZ)
-    time_limit_48h = now_local + timedelta(hours=48)
+    time_limit_48h = now_local + timedelta(hours=24)
     
     print(f"DEBUG: Buscando jogos futuros. Limite de 48h: {time_limit_48h.strftime('%d/%m %H:%M')} (BRT)")
 
