@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 import pytz
 from telegram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from typing import List, Dict, Any # <--- CORREÇÃO: Importação das classes de tipagem
+# CORREÇÃO: Importação completa das classes de tipagem, incluindo 'Optional'
+from typing import List, Dict, Any, Optional 
 
 # Importa TODAS as funções do analysis.py (API, análise e utilidades)
 from analysis import (
@@ -30,7 +31,7 @@ HOURS_LIMIT = 24 # Limite de tempo de análise (24 horas)
 TOP_QTY = 4      # Quantidade de jogos para enviar
 MIN_CONFIDENCE = 65 # Filtro mínimo de confiança (para QUALQUER aposta ser considerada)
 
-# Margem de tempo de segurança para evitar pegar jogos que já começaram ou começarão em segundos.
+# Margem de tempo de segurança
 MINUTES_BEFORE_KICKOFF = 2 
 
 # ----------------------------------------------------------------------
@@ -60,7 +61,6 @@ async def analyze_and_rate_fixture(fixture: Dict[str, Any], api_token: str) -> O
     
     # Filtro: Apenas sinais fortes (>= MIN_CONFIDENCE)
     if confidence < MIN_CONFIDENCE:
-        # print(f"DEBUG: Jogo ignorado por baixa confiança ({confidence}%)")
         return None
     
     fixture['suggestion'] = suggestion
@@ -68,7 +68,7 @@ async def analyze_and_rate_fixture(fixture: Dict[str, Any], api_token: str) -> O
     return fixture
 
 
-async def build_top_n_message(top_fixtures: List[Dict[str, Any]]) -> str: # CORREÇÃO DE TIPAGEM
+async def build_top_n_message(top_fixtures: List[Dict[str, Any]]) -> str:
     """Constrói a mensagem final consolidada para os TOP N jogos."""
     
     now = datetime.now(TZ)
@@ -130,15 +130,14 @@ async def run_analysis_send():
     print(f"DEBUG: Buscando jogos futuros. Limite de {HOURS_LIMIT}h: {time_limit_24h.strftime('%d/%m %H:%M')} (BRT)")
 
     try:
-        # 2. Busca fixtures (buscando hoje e amanhã no analysis.py)
+        # 2. Busca fixtures 
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, per_page=200) 
         
         if not fixtures:
-            # print("DEBUG: Sem fixtures retornadas pela API.")
             return
         
         # 3. FILTRO TEMPORAL E DE INÍCIO (APLICAÇÃO DO LIMITE DE 24 HORAS)
-        upcoming_fixtures = []
+        upcoming_fixtures: List[Dict[str, Any]] = []
         time_threshold = now_local + timedelta(minutes=MINUTES_BEFORE_KICKOFF) 
 
         for f in fixtures:
@@ -151,7 +150,6 @@ async def run_analysis_send():
         print(f"DEBUG: Jogos dentro de {HOURS_LIMIT}h e não iniciados (restantes): {len(upcoming_fixtures)}.")
         
         if not upcoming_fixtures:
-            # print("DEBUG: Sem jogos válidos após filtro de tempo.")
             return
             
         # 4. Analisa todos os jogos em paralelo
@@ -207,7 +205,7 @@ def start_scheduler():
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=19, minute=0) 
     
     scheduler.start()
-    print("✅ Agendador iniciado para 00:00, 06:00, 16:00, e 19:00 (BRT).")
+    print("✅ Agendador iniciado para 06:00, 12:00, e 19:00 (BRT).")
 
 async def main():
     """Função principal que mantém o bot rodando."""
