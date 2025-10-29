@@ -243,7 +243,7 @@ def start_scheduler():
     scheduler.add_job(lambda: asyncio.create_task(run_analysis_send(TOP_QTY)), "cron", hour=19, minute=0) # Noite
     
     scheduler.start()
-    print("✅ Agendador iniciado para 00:00, 06:00, 16:00, e 19:00 (BRT).")
+    print("✅ Agendador iniciado para 06:00, 12:00, e 19:00 (BRT).")
 
 async def main():
     """Função principal que mantém o bot rodando."""
