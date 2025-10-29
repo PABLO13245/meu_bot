@@ -29,7 +29,7 @@ bot = Bot(token=TELEGRAM_TOKEN)
 # CONFIGURAÇÕES DE FILTRO
 HOURS_LIMIT = 24 
 TOP_QTY = 4      
-MIN_CONFIDENCE = 60 
+MIN_CONFIDENCE = 50 
 
 # Margem de tempo de segurança
 MINUTES_BEFORE_KICKOFF = 2 
