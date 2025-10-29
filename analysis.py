@@ -115,13 +115,14 @@ async def fetch_with_retry(session: aiohttp.ClientSession, url: str, api_token: 
 
 async def fetch_upcoming_fixtures(api_token: str, per_page: int = 200) -> List[Dict[str, Any]]:
     """
-    Busca jogos futuros na API do football-data.org (próximas 48h) em Ligas específicas.
+    Busca jogos futuros na API do football-data.org (para hoje e amanhã).
+    O filtro exato de 24h será feito no main.py.
     """
     now_utc = datetime.now(timezone.utc)
-    time_limit_48h = now_utc + timedelta(hours=48)
     
+    # Buscamos hoje e amanhã para garantir que o filtro de 24h no main.py funcione corretamente.
     date_from = now_utc.strftime("%Y-%m-%d")
-    date_to = time_limit_48h.strftime("%Y-%m-%d")
+    date_to = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
 
     all_fixtures: List[Dict[str, Any]] = []
 
@@ -306,6 +307,8 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
     
     # --- 1. ANÁLISE GERAL DE GOLS (FULL TIME) - Over/Under ---
     
+    # Usamos Gols Marcados do Casa + Gols Sofridos do Fora (ambos em média)
+    # A fórmula original no seu código: home_metrics["avg_gs"] + away_metrics["avg_gc"] é a mais comum.
     total_avg_goals = home_metrics["avg_gs"] + away_metrics["avg_gc"]
                       
     confidence_goals = 50
@@ -342,10 +345,6 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
     
     # --- 3. NOVO: ANÁLISE AMBAS MARCAM (BTTS - Both Teams To Score) ---
     
-    # Probabilidade de BTTS (Home) = Média de gols marcados pelo Away + Média de gols sofridos pelo Home
-    # Probabilidade de BTTS (Away) = Média de gols marcados pelo Home + Média de gols sofridos pelo Away
-    
-    # Abordagem simplificada: % de BTTS nos últimos 5 jogos de cada time
     total_games = home_metrics["total_games"]
     home_btts_rate = home_metrics["btts_count"] / total_games
     away_btts_rate = away_metrics["btts_count"] / total_games
@@ -404,7 +403,8 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
         suggestions.sort(key=lambda x: x[1], reverse=True)
         best_suggestion, max_confidence = suggestions[0]
     else:
-        best_suggestion = "Nenhuma sugestão alcançou a confiança base (50%)"
+        # Se não houver sugestões acima do base (50%), retorna sinal fraco
+        best_suggestion = "Sem sinal forte — evite aposta"
         max_confidence = 50
         
     # Garante que a confiança final fique entre 0% e 99%
@@ -415,4 +415,30 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
 
 def kickoff_time_local(fixture: Dict[str, Any], tz: pytz.BaseTzInfo, return_datetime: bool = False) -> Any:
     """
-    Converte a string de horário UTC da API para horário local (BRT) e formata
+    Converte a string de horário UTC da API para horário local (BRT) e formata.
+    """
+    
+    starting_at_str = fixture.get("starting_at") 
+    
+    if not starting_at_str:
+        return datetime.now(tz) if return_datetime else "N/A"
+        
+    try:
+        # datetime.fromisoformat lida com 'T' e 'Z' corretamente.
+        dt_utc = datetime.fromisoformat(starting_at_str.replace('Z', '+00:00'))
+            
+        # 3. Conversão para o fuso horário local (BRT)
+        dt_local = dt_utc.astimezone(tz)
+        
+        if return_datetime:
+            return dt_local
+        
+        now_local = datetime.now(tz).date()
+        if dt_local.date() == now_local:
+            return dt_local.strftime("%H:%M")
+        else:
+            return dt_local.strftime("%H:%M — %d/%m")
+            
+    except Exception as e:
+        print(f"❌ Erro ao processar data '{starting_at_str}' para timezone: {e}") 
+        return datetime.now(tz) if return_datetime else "Erro de data"
