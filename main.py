@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import pytz
 from telegram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from typing import List, Dict, Any # <--- CORREÇÃO: Importação das classes de tipagem
 
 # Importa TODAS as funções do analysis.py (API, análise e utilidades)
 from analysis import (
@@ -15,7 +16,7 @@ from analysis import (
 )
 
 # CONFIGURAÇÕES via ENV (Valores default usados se a ENV falhar)
-# Lembre-se de substituir "YOUR_FOOTBALLDATA_API_TOKEN" pelo seu token real
+# SUBSTITUA ESTES VALORES ANTES DE RODAR
 API_TOKEN = os.getenv("API_TOKEN", "YOUR_FOOTBALLDATA_API_TOKEN") 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_TOKEN") 
 CHAT_ID = os.getenv("CHAT_ID", "YOUR_CHAT_ID")                     
@@ -24,7 +25,7 @@ TZ = pytz.timezone("America/Sao_Paulo")
 # Bot do Telegram
 bot = Bot(token=TELEGRAM_TOKEN)
 
-# NOVAS CONFIGURAÇÕES DE FILTRO
+# CONFIGURAÇÕES DE FILTRO
 HOURS_LIMIT = 24 # Limite de tempo de análise (24 horas)
 TOP_QTY = 4      # Quantidade de jogos para enviar
 MIN_CONFIDENCE = 65 # Filtro mínimo de confiança (para QUALQUER aposta ser considerada)
@@ -36,14 +37,13 @@ MINUTES_BEFORE_KICKOFF = 2
 # FUNÇÕES DE ANÁLISE E MENSAGEM
 # ----------------------------------------------------------------------
 
-async def analyze_and_rate_fixture(fixture, api_token):
+async def analyze_and_rate_fixture(fixture: Dict[str, Any], api_token: str) -> Optional[Dict[str, Any]]:
     """Analisa uma única partida, seleciona a MELHOR SUGESTÃO e retorna o objeto da partida."""
     
     participants = fixture.get("participants", [])
     if len(participants) < 2:
         return None
     
-    # Encontra IDs dos times (com base na localização 'home'/'away')
     home_id = next((p["id"] for p in participants if p["meta"]["location"] == "home"), None)
     away_id = next((p["id"] for p in participants if p["meta"]["location"] == "away"), None)
 
@@ -56,15 +56,11 @@ async def analyze_and_rate_fixture(fixture, api_token):
         compute_team_metrics(api_token, away_id, last=5)
     )
 
-    # decide_best_market: Retorna a melhor sugestão entre todos os mercados
     suggestion, confidence = decide_best_market(hm, am)
     
     # Filtro: Apenas sinais fortes (>= MIN_CONFIDENCE)
     if confidence < MIN_CONFIDENCE:
-        log_msg = f"DEBUG: Jogo ignorado por baixa confiança ({confidence}%)"
-        if confidence == 0:
-             log_msg += " (FALHA DE DADOS HISTÓRICOS)"
-        print(log_msg)
+        # print(f"DEBUG: Jogo ignorado por baixa confiança ({confidence}%)")
         return None
     
     fixture['suggestion'] = suggestion
@@ -72,7 +68,7 @@ async def analyze_and_rate_fixture(fixture, api_token):
     return fixture
 
 
-async def build_top_n_message(top_fixtures: List[Dict[str, Any]]):
+async def build_top_n_message(top_fixtures: List[Dict[str, Any]]) -> str: # CORREÇÃO DE TIPAGEM
     """Constrói a mensagem final consolidada para os TOP N jogos."""
     
     now = datetime.now(TZ)
@@ -103,7 +99,6 @@ async def build_top_n_message(top_fixtures: List[Dict[str, Any]]):
         suggestion = f.get('suggestion', 'N/A')
         confidence = f.get('confidence', 0)
 
-        # Formato de cada jogo
         part = (
             f"{i+1}.** ⚽ *{home_name}* x *{away_name}*\n"
             f"   🏆 {league_flag} {league_name}\n"
@@ -128,22 +123,21 @@ async def run_analysis_send():
     if CHAT_ID == "YOUR_CHAT_ID" or TELEGRAM_TOKEN == "YOUR_TELEGRAM_TOKEN":
         print("\n🚨 ERRO: CHAT_ID ou TELEGRAM_TOKEN não configurados. A análise será executada, mas a mensagem não será enviada.")
         
-    # 1. Definir o range de tempo (AGORA 24 HORAS)
+    # 1. Definir o range de tempo (24 HORAS)
     now_local = datetime.now(TZ)
     time_limit_24h = now_local + timedelta(hours=HOURS_LIMIT)
     
     print(f"DEBUG: Buscando jogos futuros. Limite de {HOURS_LIMIT}h: {time_limit_24h.strftime('%d/%m %H:%M')} (BRT)")
 
     try:
-        # 2. Busca fixtures (já filtrando hoje e amanhã no analysis.py)
+        # 2. Busca fixtures (buscando hoje e amanhã no analysis.py)
         fixtures = await fetch_upcoming_fixtures(API_TOKEN, per_page=200) 
         
         if not fixtures:
-            if CHAT_ID != "YOUR_CHAT_ID":
-                await bot.send_message(chat_id=CHAT_ID, text=f"⚠ A API não retornou jogos futuros para o período de análise.")
+            # print("DEBUG: Sem fixtures retornadas pela API.")
             return
         
-        # 3. FILTRO TEMPORAL E DE INÍCIO (24 HORAS)
+        # 3. FILTRO TEMPORAL E DE INÍCIO (APLICAÇÃO DO LIMITE DE 24 HORAS)
         upcoming_fixtures = []
         time_threshold = now_local + timedelta(minutes=MINUTES_BEFORE_KICKOFF) 
 
@@ -157,14 +151,12 @@ async def run_analysis_send():
         print(f"DEBUG: Jogos dentro de {HOURS_LIMIT}h e não iniciados (restantes): {len(upcoming_fixtures)}.")
         
         if not upcoming_fixtures:
-            if CHAT_ID != "YOUR_CHAT_ID":
-                await bot.send_message(chat_id=CHAT_ID, text=f"⚠ Nenhuma partida agendada para as próximas {HOURS_LIMIT}h que ainda não começou e/ou passou pelo filtro de tempo.")
+            # print("DEBUG: Sem jogos válidos após filtro de tempo.")
             return
             
         # 4. Analisa todos os jogos em paralelo
         analysis_tasks = [analyze_and_rate_fixture(f, API_TOKEN) for f in upcoming_fixtures]
         
-        # Executa a análise para todos os jogos e filtra os nulos (confiança < MIN_CONFIDENCE)
         analyzed_fixtures_raw = await asyncio.gather(*analysis_tasks)
         analyzed_fixtures = [f for f in analyzed_fixtures_raw if f is not None]
 
@@ -186,7 +178,6 @@ async def run_analysis_send():
         message = await build_top_n_message(top_fixtures)
         
         if CHAT_ID != "YOUR_CHAT_ID" and TELEGRAM_TOKEN != "YOUR_TELEGRAM_TOKEN":
-             # Parse mode é Markdown
             await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
         else:
             print(f"--- MENSAGEM TOP {len(top_fixtures)} PRONTA (NÃO ENVIADA) ---")
@@ -194,7 +185,6 @@ async def run_analysis_send():
             print("-----------------------------------")
         
     except Exception as e:
-        # log and send minimal error
         print(f"❌ Erro em run_analysis_send: {e}")
         try:
             if CHAT_ID != "YOUR_CHAT_ID":
@@ -211,11 +201,10 @@ def start_scheduler():
     scheduler = AsyncIOScheduler(timezone=TZ)
     
     # Horários de execução (BRT)
-    # Mantidos 4 horários para garantir a cobertura das 24h
-    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=0, minute=0) # Meia-noite
-    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=6, minute=0) # Manhã
-    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=16, minute=0) # Tarde
-    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=19, minute=0) # Noite
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=0, minute=0) 
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=6, minute=0) 
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=16, minute=0) 
+    scheduler.add_job(lambda: asyncio.create_task(run_analysis_send()), "cron", hour=19, minute=0) 
     
     scheduler.start()
     print("✅ Agendador iniciado para 00:00, 06:00, 16:00, e 19:00 (BRT).")
@@ -223,7 +212,6 @@ def start_scheduler():
 async def main():
     """Função principal que mantém o bot rodando."""
     
-    # 1. Checagem de variáveis de ambiente
     missing = []
     if API_TOKEN == "YOUR_FOOTBALLDATA_API_TOKEN": missing.append("API_TOKEN") 
     if TELEGRAM_TOKEN == "YOUR_TELEGRAM_TOKEN": missing.append("TELEGRAM_TOKEN")
@@ -231,19 +219,14 @@ async def main():
         
     if missing:
         print("🚨 ATENÇÃO: Variáveis de ambiente ausentes ou com valor default:", missing)
-        print("O bot rodará o scheduler, mas não enviará mensagens até a configuração correta.")
 
-    # 2. Inicia o agendador
     start_scheduler()
     
-    # 3. Opção de teste imediato
     if os.getenv("TEST_NOW", "0") == "1":
         print("TEST_NOW=1 -> enviando teste imediato...")
         await run_analysis_send()
         
-    # 4. Mantém o loop ativo (Keep Alive) - ESSENCIAL PARA O SCHEDULER
     try:
-        # Dorme por 1 hora, mas o agendador continua rodando em background
         while True:
             await asyncio.sleep(60 * 60) 
     except Exception as e:
