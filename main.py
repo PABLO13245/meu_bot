@@ -34,8 +34,8 @@ MIN_CONFIDENCE = 50
 # Margem de tempo de segurança
 MINUTES_BEFORE_KICKOFF = 2 
 
-# NOVO VALOR: Aumentado para 2.5 segundos para respeitar o Rate Limit da API Free
-SLEEP_TIME_BETWEEN_ANALYSIS = 2.5 
+# NOVO VALOR: Aumentado para 4.5 segundos para respeitar o Rate Limit da API Free
+SLEEP_TIME_BETWEEN_ANALYSIS = 4.5 
 
 # ----------------------------------------------------------------------
 # FUNÇÕES DE ANÁLISE E MENSAGEM
