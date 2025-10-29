@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pytz
 from telegram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-# CORREÇÃO: Importação completa das classes de tipagem, incluindo 'Optional'
+# CORREÇÃO CRÍTICA: Importação completa das classes de tipagem para resolver NameError
 from typing import List, Dict, Any, Optional 
 
 # Importa TODAS as funções do analysis.py (API, análise e utilidades)
@@ -27,12 +27,15 @@ TZ = pytz.timezone("America/Sao_Paulo")
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # CONFIGURAÇÕES DE FILTRO
-HOURS_LIMIT = 24 # Limite de tempo de análise (24 horas)
-TOP_QTY = 4      # Quantidade de jogos para enviar
-MIN_CONFIDENCE = 50 # Filtro mínimo de confiança (para QUALQUER aposta ser considerada)
+HOURS_LIMIT = 24 
+TOP_QTY = 4      
+MIN_CONFIDENCE = 60 
 
 # Margem de tempo de segurança
 MINUTES_BEFORE_KICKOFF = 2 
+
+# NOVO: Tempo de espera entre a análise de cada jogo para evitar Rate Limit (em segundos)
+SLEEP_TIME_BETWEEN_ANALYSIS = 1.2 
 
 # ----------------------------------------------------------------------
 # FUNÇÕES DE ANÁLISE E MENSAGEM
@@ -52,6 +55,8 @@ async def analyze_and_rate_fixture(fixture: Dict[str, Any], api_token: str) -> O
         return None
     
     # Análise de Métricas
+    # AWAIT ASYNCIO.GATHER é mantido para buscar os dados de HOME e AWAY em PARALELO, 
+    # economizando tempo de espera do loop principal.
     hm, am = await asyncio.gather(
         compute_team_metrics(api_token, home_id, last=5), 
         compute_team_metrics(api_token, away_id, last=5)
@@ -136,14 +141,13 @@ async def run_analysis_send():
         if not fixtures:
             return
         
-        # 3. FILTRO TEMPORAL E DE INÍCIO (APLICAÇÃO DO LIMITE DE 24 HORAS)
+        # 3. FILTRO TEMPORAL E DE INÍCIO
         upcoming_fixtures: List[Dict[str, Any]] = []
         time_threshold = now_local + timedelta(minutes=MINUTES_BEFORE_KICKOFF) 
 
         for f in fixtures:
             kickoff_dt = kickoff_time_local(f, TZ, return_datetime=True)
             
-            # Filtro de 24 horas e Filtro de JÁ COMEÇOU
             if time_threshold < kickoff_dt <= time_limit_24h:
                 upcoming_fixtures.append(f)
 
@@ -152,12 +156,17 @@ async def run_analysis_send():
         if not upcoming_fixtures:
             return
             
-        # 4. Analisa todos os jogos em paralelo
-        analysis_tasks = [analyze_and_rate_fixture(f, API_TOKEN) for f in upcoming_fixtures]
-        
-        analyzed_fixtures_raw = await asyncio.gather(*analysis_tasks)
-        analyzed_fixtures = [f for f in analyzed_fixtures_raw if f is not None]
+        # 4. Analisa os jogos sequencialmente, com tempo de espera
+        analyzed_fixtures: List[Dict[str, Any]] = []
 
+        for f in upcoming_fixtures:
+            # NOVO: Tempo de espera para evitar Rate Limit
+            await asyncio.sleep(SLEEP_TIME_BETWEEN_ANALYSIS) 
+
+            result = await analyze_and_rate_fixture(f, API_TOKEN)
+            if result is not None:
+                analyzed_fixtures.append(result)
+        
         if not analyzed_fixtures:
             message = f"⚠ Nenhuma partida TOP encontrada nas próximas {HOURS_LIMIT}h, com confiança acima de {MIN_CONFIDENCE}%."
             if CHAT_ID != "YOUR_CHAT_ID":
