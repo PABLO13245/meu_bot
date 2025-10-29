@@ -142,7 +142,7 @@ async def main(api_token: str):
 # ATENÇÃO: SUBSTITUA 'SUA_CHAVE_AQUI' PELA SUA CHAVE REAL DA API football-data.org
 API_KEY = "SUA_CHAVE_AQUI" 
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     if API_KEY == "SUA_CHAVE_AQUI":
         print("\n🚨 ERRO: Por favor, substitua 'SUA_CHAVE_AQUI' pelo seu token da API football-data.org antes de executar.")
     else:
