@@ -1,434 +1,156 @@
-# Importações necessárias para operações assíncronas e análise
-import asyncio
-import aiohttp
-import numpy as np
-import pytz 
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Tuple, Optional
-
-# Configurações da API football-data.org
-BASE_URL = "https://api.football-data.org/v4"
-# O football-data.org usa status codes textuais. O status 2 (FINISHED) é necessário para histórico.
-STATE_FINISHED_ID = "FINISHED"
-
-# Dicionário de Códigos de Competição para Filtro (substitui a busca geral da Sportmonks)
-# A API football-data.org exige que as ligas sejam filtradas por ID ou código.
-# Estes são os códigos de exemplo (competitions/areas) que o bot irá buscar.
-# PL: Premier League, PD: La Liga, SA: Serie A, BL1: Bundesliga, PPL: Primeira Liga (Portugal)
-COMPETITION_CODES = ["PL", "PD", "SA", "BL1", "PPL"] 
-
-# Mapeamento de códigos de área de 3 letras (Alpha-3) para códigos de bandeira de 2 letras (Alpha-2)
-# Adicionei mais códigos comuns (FRA, NLD) para maior robustez.
-AREA_CODE_MAP = {
-    "ENG": "GB", # Reino Unido (para Premier League)
-    "ESP": "ES", # Espanha (para La Liga)
-    "ITA": "IT", # Itália (para Serie A)
-    "DEU": "DE", # Alemanha (para Bundesliga)
-    "GER": "DE", # Alemanha (código alternativo)
-    "POR": "PT", # Portugal (para Primeira Liga)
-    "FRA": "FR", # França (Ligue 1)
-    "NLD": "NL", # Holanda (Eredivisie)
-    "BEL": "BE", # Bélgica
-}
-
-
 # ======================================================================
-# FUNÇÕES DE UTILIDADE E CONFIGURAÇÃO
+# BLOCO PRINCIPAL DE EXECUÇÃO
 # ======================================================================
 
-def get_flag_emoji(country_code: str) -> str:
-    """Converte o código de país (ISO 3166-1 alpha-2) em emoji de bandeira,
-       mapeando códigos de 3 letras (Alpha-3) se necessário."""
-    if not country_code:
-        return ""
-        
-    code = country_code.upper()
-    
-    if len(code) == 3:
-        # Tenta mapear o código de 3 letras (Area Code) para 2 letras (ISO-2)
-        code = AREA_CODE_MAP.get(code, "") 
-        
-    if len(code) != 2:
-        return ""
-        
-    # Emojis de bandeira são gerados a partir de 2 caracteres regionais:
-    return "".join(chr(0x1F1E6 + ord(char) - ord('A')) for char in code)
-
-
-async def fetch_with_retry(session: aiohttp.ClientSession, url: str, api_token: str) -> Optional[Dict[str, Any]]:
+async def main(api_token: str):
     """
-    Realiza uma chamada HTTP GET assíncrona com lógica de Exponential Backoff para reenvio.
-
-    Args:
-        session: A sessão aiohttp ativa.
-        url: O URL completo da API.
-        api_token: A chave de autenticação (X-Auth-Token).
-
-    Returns:
-        Um dicionário contendo os dados JSON da API, ou None em caso de falha.
-    """
-    max_retries = 3
-    initial_delay = 1
-
-    headers = {
-        'X-Auth-Token': api_token,
-        'Content-Type': 'application/json'
-    }
-
-    for attempt in range(max_retries):
-        delay = initial_delay * (2 ** attempt)
-
-        try:
-            async with session.get(url, headers=headers) as response:
-                if response.status == 200:
-                    return await response.json()
-
-                elif response.status == 429 and attempt < max_retries - 1:
-                    print(f"⚠ Rate Limit atingido (429). Tentando novamente em {delay}s...")
-                    await asyncio.sleep(delay)
-                
-                elif response.status >= 400 and response.status < 500:
-                    # Erros do lado do cliente (Bad Request, Forbidden, Not Found)
-                    error_text = await response.text()
-                    print(f"❌ Erro irrecuperável HTTP {response.status}: {error_text}")
-                    return None
-                
-                elif response.status >= 500 and attempt < max_retries - 1:
-                    # Erros do servidor (Retryable)
-                    print(f"❌ Erro do Servidor HTTP {response.status}. Tentando novamente em {delay}s...")
-                    await asyncio.sleep(delay)
-                else:
-                    print(f"❌ Erro HTTP {response.status} na requisição: {url}")
-                    return None
-
-        except aiohttp.ClientConnectorError as e:
-            print(f"❌ Erro de Conexão: {e}")
-            if attempt < max_retries - 1:
-                print(f"   -> Reenvio em {delay}s...")
-                await asyncio.sleep(delay)
-            else:
-                return None
-        except Exception as e:
-            print(f"❌ Erro inesperado no fetch: {e}")
-            return None
-            
-    return None
-
-# ======================================================================
-# FUNÇÕES DE BUSCA DE FIXTURES E MÉTRICAS
-# ======================================================================
-
-async def fetch_upcoming_fixtures(api_token: str, per_page: int = 100) -> List[Dict[str, Any]]:
-    """
-    Busca jogos futuros na API do football-data.org (próximas 48h) em ligas específicas.
-    
-    A API football-data.org não tem um endpoint de "jogos futuros" geral como a Sportmonks.
-    Portanto, faremos a busca filtrando explicitamente a data.
-    """
-    now_utc = datetime.now(timezone.utc)
-    time_limit_48h = now_utc + timedelta(hours=48)
-    
-    # football-data.org usa formato YYYY-MM-DD
-    date_from = now_utc.strftime("%Y-%m-%d")
-    date_to = time_limit_48h.strftime("%Y-%m-%d")
-
-    all_fixtures: List[Dict[str, Any]] = []
-
-    # Cria uma sessão para todas as chamadas
-    async with aiohttp.ClientSession() as session:
-        
-        # A API exige o filtro de liga (competição)
-        # Vamos buscar os jogos para as competições definidas.
-        for comp_code in COMPETITION_CODES:
-            # Endpoint para jogos por competição
-            url = (
-                f"{BASE_URL}/competitions/{comp_code}/matches"
-                f"?dateFrom={date_from}&dateTo={date_to}"
-                f"&status=SCHEDULED,IN_PLAY,PAUSED" # Busca jogos agendados ou em andamento (para filtro de segurança)
-            )
-            
-            print(f"DEBUG: Buscando jogos de {comp_code} entre {date_from} e {date_to}.")
-
-            data = await fetch_with_retry(session, url, api_token)
-            
-            if data and data.get("matches"):
-                
-                # Mapeamento para o formato da Sportmonks (mais ou menos)
-                for m in data["matches"]:
-                    
-                    # Ignora jogos que já passaram no tempo local (o filtro principal será no main.py)
-                    if m.get('status') in ['FINISHED', 'POSTPONED', 'CANCELED']:
-                        continue
-                        
-                    # Mapeamento da estrutura football-data.org para Sportmonks
-                    # O código de área (e.g., 'ITA') é usado como código do país para a bandeira
-                    area_code = m["area"]["code"]
-                    
-                    mapped_fixture = {
-                        "id": m.get("id"),
-                        "starting_at": m.get("utcDate"), # Data e hora UTC
-                        "league": {
-                            "name": m["competition"]["name"],
-                            "country": {"code": area_code} 
-                        },
-                        "participants": [
-                            {
-                                "id": m["homeTeam"]["id"],
-                                "name": m["homeTeam"]["name"],
-                                "meta": {"location": "home"},
-                                "country": {"code": area_code} 
-                            },
-                            {
-                                "id": m["awayTeam"]["id"],
-                                "name": m["awayTeam"]["name"],
-                                "meta": {"location": "away"},
-                                "country": {"code": area_code}
-                            }
-                        ]
-                    }
-                    all_fixtures.append(mapped_fixture)
-                    
-            elif data is not None:
-                # O token pode não ter acesso a algumas ligas, ou a API pode retornar 0 jogos
-                print(f"DEBUG: Competição {comp_code} não retornou jogos ou acesso negado.")
-    
-    print(f"✅ Jogos futuros encontrados (Total): {len(all_fixtures)}")
-    return all_fixtures
-
-
-async def compute_team_metrics(api_token: str, team_id: int, last: int = 5) -> Dict[str, Any]:
-    """
-    Busca os últimos 'last' jogos do time na API para calcular métricas reais.
+    Função principal que orquestra a busca de jogos, cálculo de métricas e análise de mercado.
     """
     
-    DEFAULT_METRICS_ZERO = {
-        "avg_gs": 0.0, "avg_gc": 0.0, "form_score": 0.0,
-        "avg_corners_for": 0.0, "avg_ht_goals_for": 0.0,
-        "games_count": 0
-    }
+    # Define o Fuso Horário Local (ex: BRT - Brasília Time)
+    LOCAL_TIMEZONE = pytz.timezone('America/Sao_Paulo')
     
-    # Endpoint para jogos do time, filtrado por status 'FINISHED', ordenado por data descendente
-    url = f"{BASE_URL}/teams/{team_id}/matches?status={STATE_FINISHED_ID}&limit={last}"
+    print("🤖 Iniciando o Bot de Análise de Apostas (football-data.org) ⚽\n")
     
-    metrics = {
-        "goals_scored": 0, "goals_conceded": 0, "wins": 0, "draws": 0, 
-        "losses": 0, "corners": 0, "ht_goals_for": 0, "total_games": 0 
-    }
-    
-    async with aiohttp.ClientSession() as session:
-        data = await fetch_with_retry(session, url, api_token)
-        
-        if not data or not data.get("matches"):
-            print(f"⚠ Time {team_id} não tem jogos finalizados ou falha na API.")
-            return DEFAULT_METRICS_ZERO
-
-        historical_fixtures = data.get("matches", [])
-        metrics["total_games"] = len(historical_fixtures)
-
-        for m in historical_fixtures:
-            score = m.get("score", {})
-            ft_score = score.get("fullTime", {})
-            ht_score = score.get("halfTime", {}) # Score de Half Time já vem aqui
-            
-            home_id = m.get("homeTeam", {}).get("id")
-            
-            is_home_game = (home_id == team_id)
-
-            gs = 0
-            gc = 0
-            gols_ht = 0
-            
-            # --- Análise FT ---
-            if ft_score and ft_score.get("home") is not None and ft_score.get("away") is not None:
-                home_g = ft_score["home"]
-                away_g = ft_score["away"]
-                
-                if is_home_game:
-                    gs = home_g
-                    gc = away_g
-                else: 
-                    gs = away_g
-                    gc = home_g
-                
-                metrics["goals_scored"] += gs
-                metrics["goals_conceded"] += gc
-                
-                # Contagem de V/E/D (baseado nos gols finais)
-                if gs > gc: metrics["wins"] += 1
-                elif gs == gc: metrics["draws"] += 1
-                else: metrics["losses"] += 1
-                
-            # --- Análise Gols HT ---
-            if ht_score and ht_score.get("home") is not None and ht_score.get("away") is not None:
-                home_ht_g = ht_score["home"]
-                away_ht_g = ht_score["away"]
-
-                if is_home_game:
-                    gols_ht = home_ht_g
-                else:
-                    gols_ht = away_ht_g
-
-                metrics["ht_goals_for"] += gols_ht
-                
-            # --- Análise Escanteios (Corners) ---
-            # A API football-data.org não fornece dados de escanteios (corners) por padrão nos endpoints
-            # de partidas e times, a menos que seja um endpoint específico ou um plano pago.
-            # Para evitar quebrar o bot, vamos simular dados médios de escanteios.
-            # EM CENÁRIO REAL: Este código falharia ou precisaria de outra fonte/plano.
-            # Aqui, simulamos que a média de escanteios do time é 5.
-            metrics["corners"] += 5 
-
-
-        # 4. Cálculo final das métricas
-        games_count = metrics["total_games"]
-        
-        final_metrics = {
-            "team_id": team_id,
-            # Gols FT
-            "avg_gs": metrics["goals_scored"] / games_count if games_count > 0 else 0.0,
-            "avg_gc": metrics["goals_conceded"] / games_count if games_count > 0 else 0.0,
-            # Forma (V/E/D) - 100 * (Vitorias + Empates * 0.5) / Total
-            "form_score": (metrics["wins"] * 100 + metrics["draws"] * 50) / games_count if games_count > 0 else 0.0,
-            # Escanteios (SIMULADO!)
-            "avg_corners_for": metrics["corners"] / games_count if games_count > 0 else 0.0,
-            # Gols HT
-            "avg_ht_goals_for": metrics["ht_goals_for"] / games_count if games_count > 0 else 0.0,
-            "games_count": games_count
-        }
-        
-        print(f"DEBUG: Métricas reais para o Time {team_id} (n={games_count}): GS={final_metrics['avg_gs']:.2f}, HT={final_metrics['avg_ht_goals_for']:.2f}, Form={final_metrics['form_score']:.0f}%")
-        return final_metrics
-
-
-# ======================================================================
-# FUNÇÕES DE ANÁLISE E DECISÃO (MANTIDAS DO CÓDIGO ORIGINAL)
-# ======================================================================
-
-def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any]) -> Tuple[str, int]:
-    """
-    Decide a melhor sugestão de aposta e calcula a confiança, analisando múltiplos mercados.
-    """
-    
-    best_suggestion = "Sem sinal forte — evite aposta"
-    max_confidence = 50 # Confiança base
-    
-    # VERIFICAÇÃO CRÍTICA: Se algum time não tiver dados, a confiança não pode ser alta.
-    if home_metrics.get("games_count", 0) == 0 or away_metrics.get("games_count", 0) == 0:
-        return "Sem dados históricos de um ou ambos os times", 0
-        
-    
-    # --- 1. ANÁLISE GERAL DE GOLS (FULL TIME) ---
-    
-    total_avg_goals = home_metrics["avg_gs"] + away_metrics["avg_gs"]
-                      
-    confidence_goals = 50
-    suggestion_goals = "Sem sinal"
-    
-    if total_avg_goals >= 2.8:
-        suggestion_goals = "Mais de 2.5 Gols (Over 2.5 FT)"
-        confidence_goals += int(min(total_avg_goals * 12, 49)) 
-    elif total_avg_goals >= 2.0:
-        suggestion_goals = "Mais de 1.5 Gols (Over 1.5 FT)"
-        confidence_goals += int(min(total_avg_goals * 10, 30))
-        
-    if confidence_goals > max_confidence:
-        max_confidence = confidence_goals
-        best_suggestion = suggestion_goals
-
-
-    # --- 2. ANÁLISE VENCEDOR (1X2) ---
-    
-    home_form = home_metrics["form_score"]
-    away_form = away_metrics["form_score"]
-    form_diff = abs(home_form - away_form)
-    
-    confidence_winner = 50
-    suggestion_winner = "Sem sinal"
-    
-    if form_diff > 45: 
-        winner = "Casa" if home_form > away_form else "Fora"
-        if winner == "Casa" and home_metrics["avg_gs"] > 1.8:
-            suggestion_winner = "Vitória do Time da Casa (ML Home)"
-            confidence_winner = min(99, max(confidence_winner, 60 + int(form_diff / 2))) 
-        elif winner == "Fora" and away_metrics["avg_gs"] > 1.8:
-            suggestion_winner = "Vitória do Time Visitante (ML Away)"
-            confidence_winner = min(99, max(confidence_winner, 60 + int(form_diff / 2))) 
-            
-    if confidence_winner > max_confidence:
-        max_confidence = confidence_winner
-        best_suggestion = suggestion_winner
-
-
-    # --- 3. ANÁLISE ESCANTEIOS (CORNERS) ---
-    
-    total_avg_corners = home_metrics["avg_corners_for"] + away_metrics["avg_corners_for"]
-    
-    confidence_corners = 50
-    suggestion_corners = "Sem sinal"
-    
-    if total_avg_corners >= 10.8:
-        suggestion_corners = "Mais de 10.5 Escanteios (Over 10.5 CR)"
-        confidence_corners += int(min((total_avg_corners - 10.0) * 8, 49)) 
-    elif total_avg_corners >= 9.0:
-        suggestion_corners = "Mais de 9.5 Escanteios (Over 9.5 CR)"
-        confidence_corners += int(min((total_avg_corners - 8.5) * 8, 35))
-
-    if confidence_corners > max_confidence:
-        max_confidence = confidence_corners
-        best_suggestion = suggestion_corners
-        
-        
-    # --- 4. ANÁLISE GOLS NO PRIMEIRO TEMPO (HT GOALS) ---
-    
-    total_avg_ht_goals = home_metrics["avg_ht_goals_for"] + away_metrics["avg_ht_goals_for"]
-    
-    confidence_ht = 50
-    suggestion_ht = "Sem sinal"
-    
-    if total_avg_ht_goals >= 1.5:
-        suggestion_ht = "Mais de 1.5 Gols (Over 1.5 HT)"
-        confidence_ht += int(min((total_avg_ht_goals - 1.0) * 25, 49)) 
-    elif total_avg_ht_goals >= 0.8:
-        suggestion_ht = "Mais de 0.5 Gols (Over 0.5 HT)"
-        confidence_ht += int(min((total_avg_ht_goals - 0.5) * 20, 30))
-
-    if confidence_ht > max_confidence:
-        max_confidence = confidence_ht
-        best_suggestion = suggestion_ht
-
-    # Garante que a confiança fique entre 0% e 99%
-    final_confidence = min(99, max(0, max_confidence)) 
-
-    return best_suggestion, final_confidence
-
-
-def kickoff_time_local(fixture: Dict[str, Any], tz: pytz.BaseTzInfo, return_datetime: bool = False) -> Any:
-    """
-    Converte a string de horário UTC da API para horário local (BRT) e formata.
-    A API football-data.org usa o formato ISO 8601 (Ex: 2023-11-20T19:30:00Z).
-    """
-    
-    starting_at_str = fixture.get("starting_at") 
-    
-    if not starting_at_str:
-        return datetime.now(tz) if return_datetime else "N/A"
-        
+    # 1. Busca de Jogos Futuros
     try:
-        # datetime.fromisoformat lida com 'T' e 'Z' corretamente.
-        dt_utc = datetime.fromisoformat(starting_at_str.replace('Z', '+00:00'))
-            
-        # 3. Conversão para o fuso horário local (BRT)
-        dt_local = dt_utc.astimezone(tz)
-        
-        if return_datetime:
-            return dt_local
-        
-        now_local = datetime.now(tz).date()
-        if dt_local.date() == now_local:
-            return dt_local.strftime("%H:%M")
-        else:
-            return dt_local.strftime("%H:%M — %d/%m")
-            
+        upcoming_fixtures = await fetch_upcoming_fixtures(api_token)
     except Exception as e:
-        print(f"❌ Erro ao processar data '{starting_at_str}' para timezone: {e}") 
-        return datetime.now(tz) if return_datetime else "Erro de data"
+        print(f"❌ Erro fatal ao buscar jogos futuros: {e}")
+        return
+
+    if not upcoming_fixtures:
+        print("⏸ Nenhuma partida encontrada nas próximas 48 horas nas ligas filtradas.")
+        return
+
+    print(f"\n⚙ Processando análise para {len(upcoming_fixtures)} jogos encontrados...\n")
+    
+    # Lista para armazenar as tarefas de cálculo de métricas
+    tasks = []
+    
+    # Mapeamento para armazenar métricas já calculadas e evitar chamadas duplicadas
+    # Chave: ID do Time (int), Valor: Dicionário de Métricas
+    team_metrics_cache: Dict[int, Dict[str, Any]] = {}
+    
+    # 2. Criação de Tarefas de Cálculo de Métricas (Home & Away)
+    
+    async with aiohttp.ClientSession() as session:
+        # Itera sobre os jogos para extrair os IDs dos times
+        for fixture in upcoming_fixtures:
+            home_team = fixture["participants"][0]
+            away_team = fixture["participants"][1]
+            
+            home_id = home_team["id"]
+            away_id = away_team["id"]
+            
+            # Garante que a tarefa de métricas seja criada apenas se o ID não estiver em cache
+            # Isso é crucial para a eficiência.
+            if home_id not in team_metrics_cache:
+                # Criamos uma 'task' com o ID do time e o objeto de sessão
+                tasks.append(
+                    asyncio.create_task(compute_team_metrics(api_token, home_id))
+                )
+                team_metrics_cache[home_id] = None # Marca como "em processamento"
+                
+            if away_id not in team_metrics_cache:
+                tasks.append(
+                    asyncio.create_task(compute_team_metrics(api_token, away_id))
+                )
+                team_metrics_cache[away_id] = None # Marca como "em processamento"
+                
+    # 3. Execução Paralela das Tarefas de Métricas
+    print(f"⏳ Executando {len(tasks)} chamadas de API para histórico de times em paralelo...")
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    print("✅ Todas as chamadas históricas concluídas.\n")
+    
+    # Popula o cache com os resultados
+    for res in results:
+        if not isinstance(res, Exception) and res.get("team_id") is not None:
+            team_metrics_cache[res["team_id"]] = res
+        elif isinstance(res, Exception):
+            print(f"⚠ Uma tarefa de métricas falhou: {res}")
+            
+    # 4. Análise e Formatação dos Resultados
+    
+    final_analysis: List[Dict[str, Any]] = []
+    
+    for fixture in upcoming_fixtures:
+        
+        home_team = fixture["participants"][0]
+        away_team = fixture["participants"][1]
+        
+        # Recupera as métricas do cache
+        home_metrics = team_metrics_cache.get(home_team["id"], {"games_count": 0})
+        away_metrics = team_metrics_cache.get(away_team["id"], {"games_count": 0})
+        
+        # Ignora jogos onde a coleta de histórico falhou para um ou ambos os times
+        if home_metrics.get("games_count", 0) == 0 or away_metrics.get("games_count", 0) == 0:
+            print(f"⚠ Pulando {home_team['name']} vs {away_team['name']}: Dados insuficientes/falha no histórico.")
+            continue
+            
+        # Executa o algoritmo de decisão
+        market, confidence = decide_best_market(home_metrics, away_metrics)
+        
+        # Obtém o horário formatado
+        kickoff = kickoff_time_local(fixture, LOCAL_TIMEZONE)
+        
+        # Formata o resultado
+        final_analysis.append({
+            "fixture_id": fixture["id"],
+            "date": kickoff,
+            "league": f"{get_flag_emoji(fixture['league']['country']['code'])} {fixture['league']['name']}",
+            "matchup": f"{home_team['name']} vs {away_team['name']}",
+            "suggestion": market,
+            "confidence": confidence,
+            "home_metrics": home_metrics,
+            "away_metrics": away_metrics
+        })
+
+
+    # 5. Apresentação dos Resultados
+    
+    print("\n" + "="*80)
+    print("🏆 ANÁLISE DE SUGESTÕES DE APOSTAS PARA AS PRÓXIMAS 48H")
+    print("="*80 + "\n")
+    
+    # Filtra por sugestões com alta confiança
+    high_confidence_suggestions = sorted([
+        a for a in final_analysis if a["confidence"] >= 65
+    ], key=lambda x: x["confidence"], reverse=True)
+    
+    low_confidence_games = len(final_analysis) - len(high_confidence_suggestions)
+    
+    
+    if high_confidence_suggestions:
+        print(f"🌟 *{len(high_confidence_suggestions)} Sugestões de Alta Confiança (>= 65%)*\n")
+        
+        for idx, analysis in enumerate(high_confidence_suggestions):
+            print(f"{idx+1}. {analysis['matchup']}** ({analysis['date']})")
+            print(f"   LIGA: {analysis['league']}")
+            print(f"   📈 SUGESTÃO: *{analysis['suggestion']}*")
+            print(f"   🔥 CONFIANÇA: *{analysis['confidence']}%*\n")
+        
+        print(f"\nℹ Há {low_confidence_games} jogos adicionais com sugestões de baixa confiança (< 65%).")
+    else:
+        print("❌ Nenhuma sugestão com alta confiança (>= 65%) foi encontrada. Tente mais tarde.")
+
+
+# ======================================================================
+# EXECUÇÃO DO BLOCO PRINCIPAL
+# ======================================================================
+
+# ATENÇÃO: SUBSTITUA 'SUA_CHAVE_AQUI' PELA SUA CHAVE REAL DA API football-data.org
+API_KEY = "SUA_CHAVE_AQUI" 
+
+if _name_ == "_main_":
+    if API_KEY == "SUA_CHAVE_AQUI":
+        print("\n🚨 ERRO: Por favor, substitua 'SUA_CHAVE_AQUI' pelo seu token da API football-data.org antes de executar.")
+    else:
+        # Para executar uma função 'async' em Python
+        # O bot só deve ser executado com Python 3.7+
+        import platform
+        if platform.system() == 'Windows':
+            # Necessário no Windows para algumas versões do Python
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            
+        asyncio.run(main(API_KEY))
