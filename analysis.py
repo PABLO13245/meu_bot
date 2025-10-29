@@ -4,20 +4,20 @@ import aiohttp
 import numpy as np
 import pytz 
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Tuple, Optional # <--- List, Dict, Tuple, Optional são importados aqui
+# GARANTINDO A IMPORTAÇÃO DE TODOS OS TIPOS USADOS
+from typing import Dict, Any, List, Tuple, Optional 
 
 # Configurações da API football-data.org
 BASE_URL = "https://api.football-data.org/v4"
-# O football-data.org usa status codes textuais. O status 2 (FINISHED) é necessário para histórico.
 STATE_FINISHED_ID = "FINISHED"
 
-# Dicionário de Códigos de Competição (Atualizado com todas as ligas do seu Plano Free)
+# Dicionário de Códigos de Competição (Seu plano Free)
 COMPETITION_CODES = [
     "PL", "PD", "SA", "BL1", "PPL",  # Ligas Top
     "WC", "CL", "DED", "BSA", "FL1", "ELC", "EC" # Copas e Ligas Adicionais
 ] 
 
-# Mapeamento de códigos de área de 3 letras (Alpha-3) para códigos de bandeira de 2 letras (Alpha-2)
+# Mapeamento de códigos de área
 AREA_CODE_MAP = {
     "ENG": "GB", "ESP": "ES", "ITA": "IT", "DEU": "DE", "GER": "DE", 
     "POR": "PT", "BRA": "BR", "FRA": "FR", "NLD": "NL", "BEL": "BE", 
@@ -30,13 +30,11 @@ AREA_CODE_MAP = {
 # ======================================================================
 
 def get_flag_emoji(country_code: str) -> str:
-    """Converte o código de país (ISO 3166-1 alpha-2) em emoji de bandeira,
-       mapeando códigos de 3 letras (Alpha-3) se necessário."""
+    """Converte o código de país em emoji de bandeira."""
     if not country_code:
-        return "🌎" 
+        return "🌎"
         
     code = country_code.upper()
-    
     if len(code) == 3 or code == "WORLD" or code == "EUR":
         code = AREA_CODE_MAP.get(code, "WW")
         
@@ -99,11 +97,8 @@ async def fetch_with_retry(session: aiohttp.ClientSession, url: str, api_token: 
 async def fetch_upcoming_fixtures(api_token: str, per_page: int = 200) -> List[Dict[str, Any]]:
     """
     Busca jogos futuros na API do football-data.org (para hoje e amanhã).
-    O filtro exato de 24h será feito no main.py.
     """
     now_utc = datetime.now(timezone.utc)
-    
-    # Buscamos hoje e amanhã para garantir que o filtro de 24h no main.py funcione corretamente.
     date_from = now_utc.strftime("%Y-%m-%d")
     date_to = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -118,14 +113,10 @@ async def fetch_upcoming_fixtures(api_token: str, per_page: int = 200) -> List[D
                 f"&status=SCHEDULED,IN_PLAY,PAUSED" 
             )
             
-            # print(f"DEBUG: Buscando jogos de {comp_code} entre {date_from} e {date_to}.")
-
             data = await fetch_with_retry(session, url, api_token)
             
             if data and data.get("matches"):
-                
                 for m in data["matches"]:
-                    
                     if m.get('status') in ['FINISHED', 'POSTPONED', 'CANCELED']:
                         continue
                         
@@ -144,10 +135,6 @@ async def fetch_upcoming_fixtures(api_token: str, per_page: int = 200) -> List[D
                         ]
                     }
                     all_fixtures.append(mapped_fixture)
-                    
-            elif data is not None:
-                # print(f"DEBUG: Competição {comp_code} não retornou jogos ou acesso negado.")
-                pass
     
     print(f"✅ Jogos futuros encontrados (Total): {len(all_fixtures)}")
     return all_fixtures
@@ -176,7 +163,6 @@ async def compute_team_metrics(api_token: str, team_id: int, last: int = 5) -> D
         data = await fetch_with_retry(session, url, api_token)
         
         if not data or not data.get("matches"):
-            # print(f"⚠ Time {team_id} não tem jogos finalizados ou falha na API.")
             return DEFAULT_METRICS_ZERO
 
         historical_fixtures = data.get("matches", [])
@@ -196,39 +182,29 @@ async def compute_team_metrics(api_token: str, team_id: int, last: int = 5) -> D
             if ft_score and ft_score.get("home") is not None and ft_score.get("away") is not None:
                 home_g, away_g = ft_score["home"], ft_score["away"]
                 
-                if is_home_game:
-                    gs, gc = home_g, away_g
-                else: 
-                    gs, gc = away_g, home_g
+                if is_home_game: gs, gc = home_g, away_g
+                else: gs, gc = away_g, home_g
                 
                 metrics["goals_scored"] += gs
                 metrics["goals_conceded"] += gc
                 
-                # Contagem de V/E/D
                 if gs > gc: metrics["wins"] += 1
                 elif gs == gc: metrics["draws"] += 1
                 else: metrics["losses"] += 1
                 
-                # Contagem de Ambos Marcam (BTTS)
-                if home_g > 0 and away_g > 0:
-                    metrics["btts_sim"] += 1
+                if home_g > 0 and away_g > 0: metrics["btts_sim"] += 1
                 
             # --- Análise Gols HT ---
             if ht_score and ht_score.get("home") is not None and ht_score.get("away") is not None:
                 home_ht_g, away_ht_g = ht_score["home"], ht_score["away"]
-
-                if is_home_game:
-                    gols_ht = home_ht_g
-                else:
-                    gols_ht = away_ht_g
+                if is_home_game: gols_ht = home_ht_g
+                else: gols_ht = away_ht_g
 
                 metrics["ht_goals_for"] += gols_ht
                 
-            # --- Análise Escanteios (Corners) ---
             metrics["corners"] += 5 # Simulado
 
 
-        # 4. Cálculo final das métricas
         games_count = metrics["total_games"]
         
         final_metrics = {
@@ -242,12 +218,11 @@ async def compute_team_metrics(api_token: str, team_id: int, last: int = 5) -> D
             "total_games": games_count
         }
         
-        # print(f"DEBUG: Métricas reais para o Time {team_id} (n={games_count}): GS={final_metrics['avg_gs']:.2f}, HT={final_metrics['avg_ht_goals_for']:.2f}, Form={final_metrics['form_score']:.0f}%")
         return final_metrics
 
 
 # ======================================================================
-# FUNÇÕES DE ANÁLISE E DECISÃO (ATUALIZADA com DC e AH 0.0)
+# FUNÇÕES DE ANÁLISE E DECISÃO (COM DC e AH 0.0)
 # ======================================================================
 
 def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any]) -> Tuple[str, int]:
@@ -257,7 +232,7 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
     
     suggestions: List[Tuple[str, int]] = []
     
-    # VERIFICAÇÃO CRÍTICA: Se algum time não tiver dados, a confiança é 0.
+    # Mínimo de 3 jogos para análise
     if home_metrics.get("total_games", 0) < 3 or away_metrics.get("total_games", 0) < 3:
         return "Sem dados históricos suficientes (mín. 3 jogos)", 0
         
@@ -269,7 +244,7 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
     total_avg_ht_goals = home_metrics["avg_ht_goals_for"] + away_metrics["avg_ht_goals_for"]
     
     
-    # --- 1. ANÁLISE GERAL DE GOLS (FULL TIME) - Over/Under ---
+    # --- 1. Gols FT (Over/Under) ---
                       
     confidence_goals = 50
     if total_avg_goals >= 2.8:
@@ -280,19 +255,18 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
         suggestion_goals = "Mais de 1.5 Gols (Over 1.5 FT)"
         confidence_goals += int(min((total_avg_goals - 2.0) * 10 + 10, 35))
         suggestions.append((suggestion_goals, confidence_goals))
-    # Adicionar Under 2.5 para jogos com média muito baixa
     elif total_avg_goals <= 1.8:
         suggestion_goals = "Menos de 2.5 Gols (Under 2.5 FT)"
         confidence_goals += int(min((2.5 - total_avg_goals) * 15 + 10, 30))
         suggestions.append((suggestion_goals, confidence_goals))
 
 
-    # --- 2. ANÁLISE VENCEDOR (1X2) - Moneyline ---
+    # --- 2. Vencedor (ML) ---
     
     confidence_winner = 50
-    if form_diff > 50: # Se a diferença de forma for MUITO alta, sugere ML
+    if form_diff > 50: 
         winner = "Casa" if home_form > away_form else "Fora"
-        if winner == "Casa" and home_metrics["avg_gs"] > 2.0: # Exige GS alto para ML
+        if winner == "Casa" and home_metrics["avg_gs"] > 2.0: 
             suggestion_winner = "Vitória do Time da Casa (ML Home)"
             confidence_winner = min(99, max(confidence_winner, 65 + int(form_diff / 2)))
             suggestions.append((suggestion_winner, confidence_winner))
@@ -302,63 +276,55 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
             suggestions.append((suggestion_winner, confidence_winner))
             
     
-    # --- 3. NOVO: ANÁLISE DUPLA CHANCE (DC) e HANDICAP ASIÁTICO 0.0 ---
+    # --- 3. Dupla Chance (DC) e Handicap Asiático (AH 0.0) ---
     
-    confidence_dc = 55 # Base mais alta, pois são apostas mais seguras
+    confidence_dc = 55
 
-    if form_diff > 35: # Diferença moderada/alta de forma
-        
+    if form_diff > 35:
         winner_favored = "Casa" if home_form > away_form else "Fora"
         
         # Dupla Chance (1X ou X2)
-        if winner_favored == "Casa":
-            # Casa é favorita (35% de diferença de forma) E a média de GS é decente
-            if home_metrics["avg_gs"] > 1.5:
-                suggestion_dc = "Dupla Chance: Casa ou Empate (1X)"
-                confidence = min(95, confidence_dc + int(form_diff / 3) + 10)
-                suggestions.append((suggestion_dc, confidence))
-                
-                # Handicap Asiático 0.0 (Empate Anula Aposta) - ainda mais confiança se o ataque for forte
-                if home_metrics["avg_gs"] > 1.8:
-                    suggestion_ah = "Handicap Asiático: Casa (0.0)"
-                    confidence_ah = min(99, confidence + 5) 
-                    suggestions.append((suggestion_ah, confidence_ah))
+        if winner_favored == "Casa" and home_metrics["avg_gs"] > 1.5:
+            suggestion_dc = "Dupla Chance: Casa ou Empate (1X)"
+            confidence = min(95, confidence_dc + int(form_diff / 3) + 10)
+            suggestions.append((suggestion_dc, confidence))
+            
+            if home_metrics["avg_gs"] > 1.8: # Mais agressivo
+                suggestion_ah = "Handicap Asiático: Casa (0.0)"
+                confidence_ah = min(99, confidence + 5) 
+                suggestions.append((suggestion_ah, confidence_ah))
                     
-        elif winner_favored == "Fora":
-            # Fora é favorita (35% de diferença de forma) E a média de GS é decente
-            if away_metrics["avg_gs"] > 1.5:
-                suggestion_dc = "Dupla Chance: Fora ou Empate (X2)"
-                confidence = min(95, confidence_dc + int(form_diff / 3) + 10)
-                suggestions.append((suggestion_dc, confidence))
+        elif winner_favored == "Fora" and away_metrics["avg_gs"] > 1.5:
+            suggestion_dc = "Dupla Chance: Fora ou Empate (X2)"
+            confidence = min(95, confidence_dc + int(form_diff / 3) + 10)
+            suggestions.append((suggestion_dc, confidence))
 
-                # Handicap Asiático 0.0 
-                if away_metrics["avg_gs"] > 1.8:
-                    suggestion_ah = "Handicap Asiático: Fora (0.0)"
-                    confidence_ah = min(99, confidence + 5)
-                    suggestions.append((suggestion_ah, confidence_ah))
+            if away_metrics["avg_gs"] > 1.8: # Mais agressivo
+                suggestion_ah = "Handicap Asiático: Fora (0.0)"
+                confidence_ah = min(99, confidence + 5)
+                suggestions.append((suggestion_ah, confidence_ah))
 
 
-    # --- 4. ANÁLISE AMBAS MARCAM (BTTS - Both Teams To Score) ---
+    # --- 4. Ambos Marcam (BTTS) ---
     
     total_games = home_metrics["total_games"]
     home_btts_rate = home_metrics["btts_count"] / total_games
     away_btts_rate = away_metrics["btts_count"] / total_games
-    
     avg_btts_rate = (home_btts_rate + away_btts_rate) / 2 
     
     confidence_btts = 50
     
-    if avg_btts_rate >= 0.70 and total_avg_goals >= 2.5: # 70% ou mais BTTS E a média de gols é alta
+    if avg_btts_rate >= 0.70 and total_avg_goals >= 2.5:
         suggestion_btts = "Ambas Marcam: SIM (BTTS Yes)"
         confidence_btts += int(min((avg_btts_rate - 0.70) * 100 + 15, 49)) 
         suggestions.append((suggestion_btts, confidence_btts))
-    elif avg_btts_rate <= 0.30 and total_avg_goals < 1.8: # Menos de 30% e poucos gols no geral
+    elif avg_btts_rate <= 0.30 and total_avg_goals < 1.8:
         suggestion_btts = "Ambas Marcam: NÃO (BTTS No)"
         confidence_btts += int(min((0.30 - avg_btts_rate) * 100 + 10, 35))
         suggestions.append((suggestion_btts, confidence_btts))
 
 
-    # --- 5. ANÁLISE ESCANTEIOS (CORNERS) ---
+    # --- 5. Escanteios (Simulado) ---
     
     total_avg_corners = home_metrics["avg_corners_for"] + away_metrics["avg_corners_for"]
     confidence_corners = 50
@@ -373,7 +339,7 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
         suggestions.append((suggestion_corners, confidence_corners))
         
         
-    # --- 6. ANÁLISE GOLS NO PRIMEIRO TEMPO (HT GOALS) ---
+    # --- 6. Gols no Primeiro Tempo (HT Goals) ---
     
     confidence_ht = 50
     
@@ -386,7 +352,7 @@ def decide_best_market(home_metrics: Dict[str, Any], away_metrics: Dict[str, Any
         confidence_ht += int(min((total_avg_ht_goals - 0.5) * 20, 30))
         suggestions.append((suggestion_ht, confidence_ht))
 
-    # --- 7. SELEÇÃO DA MELHOR APOSTA ---
+    # --- 7. Seleção da Melhor Aposta ---
     
     if suggestions:
         suggestions.sort(key=lambda x: x[1], reverse=True)
