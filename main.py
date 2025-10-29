@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pytz
 from telegram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-# CORREÇÃO CRÍTICA: Importação completa das classes de tipagem para resolver NameError
+# CORREÇÃO CRÍTICA: Importação explícita de TODOS os tipos usados
 from typing import List, Dict, Any, Optional 
 
 # Importa TODAS as funções do analysis.py (API, análise e utilidades)
@@ -34,8 +34,8 @@ MIN_CONFIDENCE = 50
 # Margem de tempo de segurança
 MINUTES_BEFORE_KICKOFF = 2 
 
-# NOVO: Tempo de espera entre a análise de cada jogo para evitar Rate Limit (em segundos)
-SLEEP_TIME_BETWEEN_ANALYSIS = 1.2 
+# NOVO VALOR: Aumentado para 2.5 segundos para respeitar o Rate Limit da API Free
+SLEEP_TIME_BETWEEN_ANALYSIS = 2.5 
 
 # ----------------------------------------------------------------------
 # FUNÇÕES DE ANÁLISE E MENSAGEM
@@ -55,8 +55,6 @@ async def analyze_and_rate_fixture(fixture: Dict[str, Any], api_token: str) -> O
         return None
     
     # Análise de Métricas
-    # AWAIT ASYNCIO.GATHER é mantido para buscar os dados de HOME e AWAY em PARALELO, 
-    # economizando tempo de espera do loop principal.
     hm, am = await asyncio.gather(
         compute_team_metrics(api_token, home_id, last=5), 
         compute_team_metrics(api_token, away_id, last=5)
