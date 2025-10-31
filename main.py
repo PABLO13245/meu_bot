@@ -50,7 +50,7 @@ TZ = pytz.timezone("America/Sao_Paulo")
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # CONFIGURAÇÕES DE FILTRO
-HOURS_LIMIT = 24 
+HOURS_LIMIT = 12 
 TOP_QTY = 4      
 MIN_CONFIDENCE = 50 
 
